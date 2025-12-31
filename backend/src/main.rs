@@ -38,8 +38,20 @@ async fn main() -> std::io::Result<()> {
         accessible_collections: vec![],
     });
 
-    // Initialize Agent Orchestrator
-    let orchestrator = AgentOrchestrator::new();
+    // Initialize Agent Orchestrator with tools
+    // We wrap search_engine and graph_manager in Arc for orchestrator
+    // Since web::Data wraps them too, but we need Arc inside orchestrator.
+    // Note: HybridSearchEngine is already holding clients which are ref-counted, but strictly speaking HybridSearchEngine itself is struct.
+    // We created `let search_engine = ...`.
+    // We moved it into `search_data`? No, `web::Data::new` takes ownership.
+    // We need to clone it before giving to Data if we want to give to Orchestrator too?
+    // Or wrap in Arc first.
+    
+    let search_arc = std::sync::Arc::new(search_engine);
+    let graph_arc = std::sync::Arc::new(graph_manager);
+    
+    let orchestrator = AgentOrchestrator::new(Some(search_arc.clone()), Some(graph_arc.clone()));
+    
     // Register a default agent
     orchestrator.register_agent(AgentProfile {
         id: "default_agent".to_string(),
@@ -47,10 +59,18 @@ async fn main() -> std::io::Result<()> {
         agent_type: AgentType::Manager,
         capabilities: vec!["general".to_string()],
     }).await;
+    
+    // Spawn Agent Loop
+    let orch_for_loop = orchestrator.clone();
+    tokio::spawn(async move {
+        orch_for_loop.run_agent_loop().await;
+    });
 
     // Wrap in Data (Arc)
-    let search_data = web::Data::new(search_engine);
-    let graph_data = web::Data::new(graph_manager);
+    // Note: We used to pass 'search_engine' variable directly. Now we have 'search_arc'.
+    // web::Data::from(search_arc) works if we want to share the Arc.
+    let search_data = web::Data::from(search_arc);
+    let graph_data = web::Data::from(graph_arc);
     let rbac_data = web::Data::new(rbac);
     let orch_data = web::Data::new(orchestrator);
 
