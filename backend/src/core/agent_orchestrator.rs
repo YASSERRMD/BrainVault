@@ -180,27 +180,54 @@ impl AgentOrchestrator {
     }
     
     async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str) -> String {
+        use crate::core::llm::cohere::CohereClient;
+        
         match profile.agent_type {
             AgentType::Researcher => {
+                let mut search_context = "No results found.".to_string();
                 if let Some(ref engine) = self.search_engine {
-                    // Extract query from description (mock)
-                    // "Find X" -> query "X"
                     let query = description.replace("Find ", "").replace("Search for ", "");
-                    match engine.search(&query, 5).await {
-                         Ok(results) => {
-                             let docs: Vec<String> = results.hits.iter().map(|h| h.doc_id.clone()).collect();
-                             format!("Found {} docs: {:?}", docs.len(), docs)
-                         },
-                         Err(e) => format!("Search failed: {}", e)
+                    if let Ok(results) = engine.search(&query, 5).await {
+                         let docs: Vec<String> = results.hits.iter().map(|h| h.content.clone().chars().take(200).collect()).collect();
+                         search_context = docs.join("\n---\n");
+                    }
+                }
+                
+                // Use Cohere to summarize if available
+                if let Some(client) = CohereClient::new() {
+                    let prompt = format!(
+                        "You are a researcher. Based on the following documents, answer the query: '{}'\n\nDocuments:\n{}", 
+                        description, search_context
+                    );
+                    match client.generate(&prompt).await {
+                        Ok(res) => format!("Research Findings:\n{}", res),
+                        Err(e) => format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
                     }
                 } else {
-                    "No search engine available".to_string()
+                    format!("Found relevant documents:\n{}", search_context)
                 }
             },
             AgentType::Analyst => {
-                format!("Analyzed: {}", description)
+                if let Some(client) = CohereClient::new() {
+                    let prompt = format!("You are an expert analyst. Analyze the following request: '{}'", description);
+                    match client.generate(&prompt).await {
+                        Ok(res) => format!("Analysis:\n{}", res),
+                        Err(e) => format!("Analysis failed: {}", e)
+                    }
+                } else {
+                    format!("Analyzed: {}", description)
+                }
             },
-            _ => format!("Processed by {:?}", profile.agent_type)
+             _ => {
+                 if let Some(client) = CohereClient::new() {
+                     match client.generate(&description).await {
+                         Ok(res) => res,
+                         Err(e) => format!("Processing failed: {}", e)
+                     }
+                 } else {
+                     format!("Processed by {:?}", profile.agent_type)
+                 }
+             }
         }
     }
 }
