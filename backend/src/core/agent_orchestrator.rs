@@ -191,7 +191,28 @@ impl AgentOrchestrator {
     }
     
     async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str) -> String {
+        use crate::core::llm::azure_openai::AzureOpenAIClient;
         use crate::core::llm::cohere::CohereClient;
+        
+        // Helper to call LLM with fallback: Azure OpenAI -> Cohere -> None
+        async fn call_llm(prompt: &str) -> Result<String, String> {
+            // Try Azure OpenAI first
+            if let Some(client) = AzureOpenAIClient::new() {
+                match client.generate(prompt).await {
+                    Ok(res) => return Ok(res),
+                    Err(e) => {
+                        println!("WARN: Azure OpenAI failed: {}. Trying Cohere...", e);
+                    }
+                }
+            }
+            
+            // Fallback to Cohere
+            if let Some(client) = CohereClient::new() {
+                return client.generate(prompt).await;
+            }
+            
+            Err("No LLM provider configured".to_string())
+        }
         
         match profile.agent_type {
             AgentType::Researcher => {
@@ -204,60 +225,47 @@ impl AgentOrchestrator {
                     }
                 }
                 
-                // Use Cohere to summarize if available
-                if let Some(client) = CohereClient::new() {
-                    let prompt = format!(
-                        "You are a researcher. Based on the following documents, answer the query: '{}'\n\nDocuments:\n{}", 
-                        description, search_context
-                    );
-                    match client.generate(&prompt).await {
-                        Ok(res) => format!("Research Findings:\n{}", res),
-                        Err(e) => {
-                            // Graceful fallback on rate limit
-                            if e.contains("Rate Limit") {
-                                format!("[Rate Limited - Fallback Mode]\nQuery: {}\n\nRelevant Context Found:\n{}", description, search_context)
-                            } else {
-                                format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
-                            }
+                let prompt = format!(
+                    "You are a researcher. Based on the following documents, answer the query: '{}'\n\nDocuments:\n{}", 
+                    description, search_context
+                );
+                
+                match call_llm(&prompt).await {
+                    Ok(res) => format!("Research Findings:\n{}", res),
+                    Err(e) => {
+                        if e.contains("Rate Limit") || e.contains("No LLM") {
+                            format!("[Fallback Mode]\nQuery: {}\n\nRelevant Context Found:\n{}", description, search_context)
+                        } else {
+                            format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
                         }
                     }
-                } else {
-                    format!("Found relevant documents:\n{}", search_context)
                 }
             },
             AgentType::Analyst => {
-                if let Some(client) = CohereClient::new() {
-                    let prompt = format!("You are an expert analyst. Analyze the following request: '{}'", description);
-                    match client.generate(&prompt).await {
-                        Ok(res) => format!("Analysis:\n{}", res),
-                        Err(e) => {
-                            if e.contains("Rate Limit") {
-                                format!("[Rate Limited - Fallback Mode]\nAnalysis Request: {}\n\nPlease wait 60 seconds and retry for AI-powered analysis.", description)
-                            } else {
-                                format!("Analysis failed: {}", e)
-                            }
+                let prompt = format!("You are an expert analyst. Analyze the following request: '{}'", description);
+                match call_llm(&prompt).await {
+                    Ok(res) => format!("Analysis:\n{}", res),
+                    Err(e) => {
+                        if e.contains("Rate Limit") || e.contains("No LLM") {
+                            format!("[Fallback Mode]\nAnalysis Request: {}\n\nPlease configure an LLM provider.", description)
+                        } else {
+                            format!("Analysis failed: {}", e)
                         }
                     }
-                } else {
-                    format!("Analyzed: {}", description)
                 }
             },
-             _ => {
-                 if let Some(client) = CohereClient::new() {
-                     match client.generate(&description).await {
-                         Ok(res) => res,
-                         Err(e) => {
-                             if e.contains("Rate Limit") {
-                                 format!("[Rate Limited - Fallback Mode]\nTask received: {}\n\nCohere API is temporarily unavailable. Please wait 60s.", description)
-                             } else {
-                                 format!("Processing failed: {}", e)
-                             }
-                         }
-                     }
-                 } else {
-                     format!("Processed by {:?}", profile.agent_type)
-                 }
-             }
+            _ => {
+                match call_llm(&description).await {
+                    Ok(res) => res,
+                    Err(e) => {
+                        if e.contains("Rate Limit") || e.contains("No LLM") {
+                            format!("[Fallback Mode]\nTask received: {}\n\nNo LLM provider available.", description)
+                        } else {
+                            format!("Processing failed: {}", e)
+                        }
+                    }
+                }
+            }
         }
     }
 }
