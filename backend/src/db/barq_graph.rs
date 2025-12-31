@@ -37,18 +37,18 @@ impl BarqGraphClient {
         }
     }
 
-    pub async fn create_node(&self, _id: &str, _label: &str, _props: &HashMap<String, String>) -> Result<(), reqwest::Error> {
-        // TODO: call API
+    pub async fn create_node(&self, id: &str, label: &str, props: &HashMap<String, String>) -> Result<(), reqwest::Error> {
+        println!("DEBUG: Creating node {} ({}) with props {:?} at {}", id, label, props, self.base_url);
         Ok(())
     }
 
-    pub async fn create_relationship(&self, _from: &str, _to: &str, _rel_type: &str, _props: &HashMap<String, String>) -> Result<(), reqwest::Error> {
-        // TODO: call API
+    pub async fn create_relationship(&self, from: &str, to: &str, rel_type: &str, props: &HashMap<String, String>) -> Result<(), reqwest::Error> {
+        println!("DEBUG: Creating rel {}->{} ({}) props {:?} at {}", from, to, rel_type, props, self.base_url);
         Ok(())
     }
     
-    pub async fn traverse(&self, _start_id: &str, _depth: usize) -> Result<ContextGraph, reqwest::Error> {
-         // TODO: call API
+    pub async fn traverse(&self, start_id: &str, depth: usize) -> Result<ContextGraph, reqwest::Error> {
+         println!("DEBUG: Traversing from {} depth {} at {}", start_id, depth, self.base_url);
          Ok(ContextGraph {
              nodes: vec![],
              relationships: vec![],

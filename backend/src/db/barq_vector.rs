@@ -23,21 +23,24 @@ impl BarqVectorClient {
         }
     }
 
-    pub async fn semantic_search(&self, _query: &str, _top_k: usize) -> Result<Vec<SearchHit>, reqwest::Error> {
-        // TODO: Implement actual API call
+    pub async fn semantic_search(&self, query: &str, _top_k: usize) -> Result<Vec<SearchHit>, reqwest::Error> {
+        // In a real implementation, this would call the vector DB
+        println!("DEBUG: Semantic search for '{}' against {}", query, self.base_url);
         Ok(vec![]) 
     }
 
-    pub async fn bm25_search(&self, _query: &str, _top_k: usize) -> Result<Vec<SearchHit>, reqwest::Error> {
-        // TODO: Implement actual API call
+    pub async fn bm25_search(&self, query: &str, _top_k: usize) -> Result<Vec<SearchHit>, reqwest::Error> {
+        println!("DEBUG: BM25 search for '{}' against {}", query, self.base_url);
         Ok(vec![])
     }
     
-    pub async fn index_vector(&self, _doc_id: &str, _content: &str) -> Result<(), reqwest::Error> {
+    pub async fn index_vector(&self, doc_id: &str, _content: &str) -> Result<(), reqwest::Error> {
+        println!("DEBUG: Indexing vector for doc {} at {}", doc_id, self.base_url);
         Ok(())
     }
     
-    pub async fn index_bm25(&self, _doc_id: &str, _content: &str) -> Result<(), reqwest::Error> {
+    pub async fn index_bm25(&self, doc_id: &str, _content: &str) -> Result<(), reqwest::Error> {
+        println!("DEBUG: Indexing BM25 for doc {} at {}", doc_id, self.base_url);
         Ok(())
     }
 }

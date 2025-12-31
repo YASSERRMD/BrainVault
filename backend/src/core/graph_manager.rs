@@ -6,14 +6,14 @@ pub struct KnowledgeGraphManager {
     graph_db: BarqGraphClient,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entity {
     pub id: String,
     pub node_type: String,    // "Organization", "Department", "Policy", "Document"
     pub properties: HashMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Relationship {
     pub from_id: String,
     pub to_id: String,
