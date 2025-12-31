@@ -42,32 +42,47 @@ impl CohereClient {
     }
 
     pub async fn generate(&self, prompt: &str) -> Result<String, String> {
-        let request_body = GenerateRequest {
-            model: "command".to_string(), // Using standard Cohere command model
-            prompt: prompt.to_string(),
-            max_tokens: 300,
-            temperature: 0.7,
-        };
+        let max_retries = 3;
+        let mut retry_count = 0;
+        let mut wait_time = 2; // Start with 2 seconds
 
-        let response = self.client
-            .post("https://api.cohere.ai/v1/generate")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+        loop {
+            let request_body = GenerateRequest {
+                model: "command".to_string(), // Using standard Cohere command model
+                prompt: prompt.to_string(),
+                max_tokens: 300,
+                temperature: 0.7,
+            };
 
-        if !response.status().is_success() {
-             return Err(format!("Cohere API Error: {}", response.status()));
-        }
+            let response = self.client
+                .post("https://api.cohere.ai/v1/generate")
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .json(&request_body)
+                .send()
+                .await
+                .map_err(|e| format!("Request failed: {}", e))?;
 
-        let resp_json: GenerateResponse = response.json().await
-            .map_err(|e| format!("Parse error: {}", e))?;
+            if response.status().is_success() {
+                let resp_json: GenerateResponse = response.json().await
+                    .map_err(|e| format!("Parse error: {}", e))?;
 
-        if let Some(gen) = resp_json.generations.first() {
-            Ok(gen.text.clone())
-        } else {
-            Err("No generations returned".to_string())
+                if let Some(gen) = resp_json.generations.first() {
+                    return Ok(gen.text.clone());
+                } else {
+                    return Err("No generations returned".to_string());
+                }
+            } else if response.status().as_u16() == 429 {
+                 if retry_count >= max_retries {
+                     return Err("Cohere API Rate Limit Exceeded (429). Please try again in 1 minute.".to_string());
+                 }
+                 println!("WARN: Cohere Rate Limit 429. Retrying in {}s...", wait_time);
+                 tokio::time::sleep(tokio::time::Duration::from_secs(wait_time)).await;
+                 retry_count += 1;
+                 wait_time *= 2; // Exponential backoff
+                 continue;
+            } else {
+                 return Err(format!("Cohere API Error: {}", response.status()));
+            }
         }
     }
 }
