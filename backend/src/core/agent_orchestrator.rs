@@ -212,7 +212,14 @@ impl AgentOrchestrator {
                     );
                     match client.generate(&prompt).await {
                         Ok(res) => format!("Research Findings:\n{}", res),
-                        Err(e) => format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
+                        Err(e) => {
+                            // Graceful fallback on rate limit
+                            if e.contains("Rate Limit") {
+                                format!("[Rate Limited - Fallback Mode]\nQuery: {}\n\nRelevant Context Found:\n{}", description, search_context)
+                            } else {
+                                format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
+                            }
+                        }
                     }
                 } else {
                     format!("Found relevant documents:\n{}", search_context)
@@ -223,7 +230,13 @@ impl AgentOrchestrator {
                     let prompt = format!("You are an expert analyst. Analyze the following request: '{}'", description);
                     match client.generate(&prompt).await {
                         Ok(res) => format!("Analysis:\n{}", res),
-                        Err(e) => format!("Analysis failed: {}", e)
+                        Err(e) => {
+                            if e.contains("Rate Limit") {
+                                format!("[Rate Limited - Fallback Mode]\nAnalysis Request: {}\n\nPlease wait 60 seconds and retry for AI-powered analysis.", description)
+                            } else {
+                                format!("Analysis failed: {}", e)
+                            }
+                        }
                     }
                 } else {
                     format!("Analyzed: {}", description)
@@ -233,7 +246,13 @@ impl AgentOrchestrator {
                  if let Some(client) = CohereClient::new() {
                      match client.generate(&description).await {
                          Ok(res) => res,
-                         Err(e) => format!("Processing failed: {}", e)
+                         Err(e) => {
+                             if e.contains("Rate Limit") {
+                                 format!("[Rate Limited - Fallback Mode]\nTask received: {}\n\nCohere API is temporarily unavailable. Please wait 60s.", description)
+                             } else {
+                                 format!("Processing failed: {}", e)
+                             }
+                         }
                      }
                  } else {
                      format!("Processed by {:?}", profile.agent_type)
