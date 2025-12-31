@@ -150,8 +150,8 @@ export default function AgentsPage() {
                                     <div className="mt-4 h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                                         <div className={clsx(
                                             "h-full transition-all duration-1000",
-                                            task.status === '"Completed"' || task.status === 'Completed' ? "w-full bg-green-500" :
-                                                task.status === '"InProgress"' || task.status === 'InProgress' ? "w-1/2 bg-blue-500 animate-pulse" :
+                                            task.status.replace(/"/g, '') === 'Completed' ? "w-full bg-green-500" :
+                                                task.status.replace(/"/g, '') === 'InProgress' ? "w-1/2 bg-blue-500 animate-pulse" :
                                                     "w-5 bg-slate-500"
                                         )} />
                                     </div>
