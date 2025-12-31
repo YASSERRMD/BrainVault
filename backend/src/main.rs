@@ -75,7 +75,10 @@ async fn main() -> std::io::Result<()> {
     let orch_data = web::Data::new(orchestrator);
 
     HttpServer::new(move || {
+        let cors = actix_cors::Cors::permissive(); // For dev phase only
+
         App::new()
+            .wrap(cors)
             .app_data(search_data.clone())
             .app_data(graph_data.clone())
             .app_data(rbac_data.clone())
