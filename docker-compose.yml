@@ -1,0 +1,26 @@
+version: '3.9'
+services:
+  barq-vector:
+    image: barq-db:latest
+    ports:
+      - "9200:9200"  # Vector DB
+    environment:
+      - VECTOR_DB_MEMORY_MB=1024
+  
+  barq-graph:
+    image: barq-graphdb:latest
+    ports:
+      - "7687:7687"  # Graph DB
+    environment:
+      - GRAPH_DB_MEMORY_MB=512
+  
+  brainvault-api:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - barq-vector
+      - barq-graph
+    environment:
+      - VECTOR_DB_URL=http://barq-vector:9200
+      - GRAPH_DB_URL=http://barq-graph:7687
