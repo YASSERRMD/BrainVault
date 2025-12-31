@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use barq_sdk_rust::{BarqGrpcClient, DistanceMetric, DocumentId};
-use serde_json::json;
+use std::collections::HashMap;
 use crate::core::llm::embeddings::AzureEmbeddingClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,40 +12,75 @@ pub struct SearchHit {
     pub content: Option<String>,
 }
 
-// Cache for document content (Barq stores payloads, but we keep local cache for quick access)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InsertRequest {
+    id: String,
+    vector: Vec<f32>,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchRequest {
+    vector: Vec<f32>,
+    top_k: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchResultItem {
+    id: String,
+    score: f32,
+    payload: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchResponse {
+    results: Vec<SearchResultItem>,
+}
+
 #[derive(Clone)]
 pub struct BarqVectorClient {
-    grpc_url: String,
+    base_url: String,
     collection_name: String,
-    content_cache: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    client: reqwest::Client,
+    content_cache: Arc<RwLock<HashMap<String, String>>>,
     dimension: usize,
 }
 
 impl BarqVectorClient {
     pub fn new() -> Self {
-        let grpc_url = env::var("VECTOR_DB_GRPC_URL").unwrap_or_else(|_| "http://barq-vector:50051".to_string());
+        let base_url = env::var("VECTOR_DB_URL").unwrap_or_else(|_| "http://barq-vector:8080".to_string());
         Self {
-            grpc_url,
+            base_url,
             collection_name: "brainvault_docs".to_string(),
-            content_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            dimension: 1536, // Azure ada-002 dimension
+            client: reqwest::Client::new(),
+            content_cache: Arc::new(RwLock::new(HashMap::new())),
+            dimension: 1536,
         }
-    }
-
-    async fn get_client(&self) -> Result<BarqGrpcClient, String> {
-        BarqGrpcClient::connect(self.grpc_url.clone())
-            .await
-            .map_err(|e| format!("Failed to connect to Barq: {}", e))
     }
 
     pub async fn ensure_collection(&self) -> Result<(), String> {
-        let mut client = self.get_client().await?;
-        // Try to create collection, ignore if exists
-        match client.create_collection(&self.collection_name, self.dimension, DistanceMetric::Cosine).await {
-            Ok(_) => println!("INFO: Created collection '{}'", self.collection_name),
-            Err(e) => println!("INFO: Collection check: {} (may already exist)", e),
+        let url = format!("{}/collections", self.base_url);
+        let body = serde_json::json!({
+            "name": self.collection_name,
+            "dimension": self.dimension,
+            "distance_metric": "cosine"
+        });
+        
+        match self.client.post(&url).json(&body).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() || resp.status().as_u16() == 409 {
+                    println!("INFO: Collection '{}' ready", self.collection_name);
+                    Ok(())
+                } else {
+                    println!("WARN: Collection creation returned {}", resp.status());
+                    Ok(()) // Continue anyway
+                }
+            }
+            Err(e) => {
+                println!("WARN: Could not create collection: {}", e);
+                Ok(()) // Continue with local fallback
+            }
         }
-        Ok(())
     }
 
     pub async fn index_document(&self, doc_id: &str, content: &str) -> Result<(), String> {
@@ -55,35 +89,48 @@ impl BarqVectorClient {
             match embedding_client.get_embedding(content).await {
                 Ok(emb) => emb,
                 Err(e) => {
-                    println!("WARN: Embedding failed: {}. Skipping document.", e);
-                    return Err(e);
+                    println!("WARN: Embedding failed: {}. Storing locally only.", e);
+                    // Store locally without Barq
+                    let mut cache = self.content_cache.write().await;
+                    cache.insert(doc_id.to_string(), content.to_string());
+                    return Ok(());
                 }
             }
         } else {
-            return Err("No embedding client configured".to_string());
+            println!("WARN: No embedding client. Storing locally only.");
+            let mut cache = self.content_cache.write().await;
+            cache.insert(doc_id.to_string(), content.to_string());
+            return Ok(());
         };
 
         // Ensure collection exists
         let _ = self.ensure_collection().await;
 
-        // Insert into Barq
-        let mut client = self.get_client().await?;
-        let payload = json!({"content": content, "doc_id": doc_id});
-        
-        client.insert_document(
-            &self.collection_name,
-            DocumentId::Str(doc_id.to_string()),
-            embedding,
-            payload,
-        )
-        .await
-        .map_err(|e| format!("Barq insert failed: {}", e))?;
+        // Try to insert into Barq via REST
+        let url = format!("{}/collections/{}/vectors", self.base_url, self.collection_name);
+        let body = InsertRequest {
+            id: doc_id.to_string(),
+            vector: embedding,
+            payload: serde_json::json!({"content": content, "doc_id": doc_id}),
+        };
 
-        // Cache content locally
+        match self.client.post(&url).json(&body).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    println!("INFO: Indexed document '{}' to Barq", doc_id);
+                } else {
+                    println!("WARN: Barq insert returned {}", resp.status());
+                }
+            }
+            Err(e) => {
+                println!("WARN: Barq insert failed: {}", e);
+            }
+        }
+
+        // Always cache content locally
         let mut cache = self.content_cache.write().await;
         cache.insert(doc_id.to_string(), content.to_string());
         
-        println!("INFO: Indexed document '{}' into Barq", doc_id);
         Ok(())
     }
 
@@ -93,37 +140,85 @@ impl BarqVectorClient {
             match embedding_client.get_embedding(query).await {
                 Ok(emb) => emb,
                 Err(e) => {
-                    return Err(format!("Query embedding failed: {}", e));
+                    println!("WARN: Query embedding failed: {}. Using local search.", e);
+                    return self.local_search(query, top_k).await;
                 }
             }
         } else {
-            return Err("No embedding client configured".to_string());
+            println!("WARN: No embedding client. Using local search.");
+            return self.local_search(query, top_k).await;
         };
 
-        // Search in Barq
-        let mut client = self.get_client().await?;
-        let results = client.search(&self.collection_name, query_embedding, top_k)
-            .await
-            .map_err(|e| format!("Barq search failed: {}", e))?;
+        // Try Barq search
+        let url = format!("{}/collections/{}/search", self.base_url, self.collection_name);
+        let body = SearchRequest {
+            vector: query_embedding.clone(),
+            top_k,
+        };
 
-        // Map results
-        let cache = self.content_cache.read().await;
-        let hits: Vec<SearchHit> = results.into_iter().map(|r| {
-            let doc_id = format!("{:?}", r.id);
-            let content = cache.get(&doc_id).cloned();
-            SearchHit {
-                doc_id,
-                score: r.score,
-                content,
+        match self.client.post(&url).json(&body).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    if let Ok(search_resp) = resp.json::<SearchResponse>().await {
+                        let cache = self.content_cache.read().await;
+                        let hits: Vec<SearchHit> = search_resp.results.into_iter().map(|r| {
+                            let content = r.payload
+                                .and_then(|p| p.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()))
+                                .or_else(|| cache.get(&r.id).cloned());
+                            SearchHit {
+                                doc_id: r.id,
+                                score: r.score,
+                                content,
+                            }
+                        }).collect();
+                        return Ok(hits);
+                    }
+                }
             }
-        }).collect();
+            Err(e) => {
+                println!("WARN: Barq search failed: {}", e);
+            }
+        }
 
-        Ok(hits)
+        // Fallback to local search
+        self.local_search(query, top_k).await
+    }
+
+    async fn local_search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>, String> {
+        let cache = self.content_cache.read().await;
+        let query_lower = query.to_lowercase();
+        let query_terms: Vec<&str> = query_lower.split_whitespace().collect();
+        
+        let mut scored: Vec<(String, f32, String)> = cache
+            .iter()
+            .map(|(id, content)| {
+                let content_lower = content.to_lowercase();
+                let matches: usize = query_terms.iter()
+                    .filter(|term| content_lower.contains(*term))
+                    .count();
+                let score = matches as f32 / query_terms.len().max(1) as f32;
+                (id.clone(), score, content.clone())
+            })
+            .filter(|(_, score, _)| *score > 0.0)
+            .collect();
+
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let results: Vec<SearchHit> = scored
+            .into_iter()
+            .take(top_k)
+            .map(|(id, score, content)| SearchHit {
+                doc_id: id,
+                score,
+                content: Some(content),
+            })
+            .collect();
+
+        Ok(results)
     }
 
     pub async fn bm25_search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>, String> {
-        // For BM25, use semantic search as fallback (Barq doesn't have native BM25)
-        self.semantic_search(query, top_k).await
+        self.local_search(query, top_k).await
     }
 
     pub async fn get_document_count(&self) -> usize {
