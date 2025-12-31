@@ -144,17 +144,33 @@ impl BarqVectorClient {
         let query_lower = query.to_lowercase();
         let query_terms: Vec<&str> = query_lower.split_whitespace().collect();
         
+        // Require at least 30% of terms to match for relevance
+        let min_score_threshold = 0.3;
+        
         let mut scored: Vec<(String, f32, String)> = cache
             .iter()
             .map(|(id, content)| {
                 let content_lower = content.to_lowercase();
-                let matches: usize = query_terms.iter()
+                let id_lower = id.to_lowercase();
+                
+                // Count term matches in content
+                let content_matches: usize = query_terms.iter()
                     .filter(|term| content_lower.contains(*term))
                     .count();
-                let score = matches as f32 / query_terms.len().max(1) as f32;
+                
+                // Boost if query matches document ID
+                let id_match_boost: f32 = if query_terms.iter().any(|term| id_lower.contains(*term)) {
+                    0.3
+                } else {
+                    0.0
+                };
+                
+                let base_score = content_matches as f32 / query_terms.len().max(1) as f32;
+                let score = (base_score + id_match_boost).min(1.0);
+                
                 (id.clone(), score, content.clone())
             })
-            .filter(|(_, score, _)| *score > 0.0)
+            .filter(|(_, score, _)| *score >= min_score_threshold)
             .collect();
 
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -174,6 +190,15 @@ impl BarqVectorClient {
 
     pub async fn bm25_search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>, String> {
         self.local_search(query, top_k).await
+    }
+
+    pub async fn get_document(&self, doc_id: &str) -> Option<SearchHit> {
+        let cache = self.content_cache.read().await;
+        cache.get(doc_id).map(|content| SearchHit {
+            doc_id: doc_id.to_string(),
+            score: 1.0,
+            content: Some(content.clone()),
+        })
     }
 
     pub async fn get_document_count(&self) -> usize {

@@ -103,6 +103,26 @@ pub async fn get_knowledge_stats(
     }))
 }
 
+#[get("/api/documents/{doc_id}")]
+pub async fn get_document(
+    path: web::Path<String>,
+    engine: web::Data<HybridSearchEngine>,
+) -> impl Responder {
+    let doc_id = path.into_inner();
+    if let Some(doc) = engine.vector_db.get_document(&doc_id).await {
+        HttpResponse::Ok().json(serde_json::json!({
+            "doc_id": doc.doc_id,
+            "content": doc.content,
+            "score": doc.score
+        }))
+    } else {
+        HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Document not found",
+            "doc_id": doc_id
+        }))
+    }
+}
+
 #[post("/api/search")]
 pub async fn hybrid_search(
     query: web::Json<SearchQuery>,
