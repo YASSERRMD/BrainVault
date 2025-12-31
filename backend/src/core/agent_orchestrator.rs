@@ -188,7 +188,7 @@ impl AgentOrchestrator {
                 if let Some(ref engine) = self.search_engine {
                     let query = description.replace("Find ", "").replace("Search for ", "");
                     if let Ok(results) = engine.search(&query, 5).await {
-                         let docs: Vec<String> = results.hits.iter().map(|h| h.content.clone().chars().take(200).collect()).collect();
+                         let docs: Vec<String> = results.hits.iter().map(|h| h.content.clone().unwrap_or_default().chars().take(200).collect()).collect();
                          search_context = docs.join("\n---\n");
                     }
                 }
