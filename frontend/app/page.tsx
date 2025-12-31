@@ -88,15 +88,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-6 relative pl-4 border-l border-border/50 ml-2">
-            {[1, 2, 3].map((_, i) => (
-              <div key={i} className="relative">
-                <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-secondary border-2 border-background" />
-                <p className="text-sm text-foreground">
-                  System initialized background worker loop.
-                </p>
-                <span className="text-xs text-muted-foreground">{new Date().toLocaleTimeString()}</span>
-              </div>
-            ))}
+            <RecentActivityFeed />
           </div>
         </div>
 
@@ -120,6 +112,56 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+function RecentActivityFeed() {
+  const { data: tasks, error } = useSWR("/agents/tasks", (url) => api.get<any[]>(url).then(res => res.data), {
+    refreshInterval: 2000,
+  });
+
+  if (!tasks || tasks.length === 0) {
+    return (
+      <div className="relative">
+        <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-secondary border-2 border-background" />
+        <p className="text-sm text-foreground">System initialized. Waiting for tasks...</p>
+        <span className="text-xs text-muted-foreground">Now</span>
+      </div>
+    );
+  }
+
+  // Show last 5 tasks
+  return (
+    <>
+      {[...tasks].reverse().slice(0, 5).map((task: any, i: number) => {
+        // Find latest audit log
+        const latestLog = task.audit_log && task.audit_log.length > 0
+          ? task.audit_log[task.audit_log.length - 1]
+          : { action: "CREATED", timestamp: Date.now() / 1000 };
+
+        return (
+          <div key={task.task_id + i} className="relative animate-fade-in">
+            <div className={clsx(
+              "absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-background",
+              task.status.includes("Completed") ? "bg-green-500" :
+                task.status.includes("InProgress") ? "bg-blue-500 animate-pulse" :
+                  task.status.includes("Failed") ? "bg-red-500" :
+                    "bg-slate-500"
+            )} />
+            <p className="text-sm text-foreground font-medium">
+              {latestLog.action}: {task.task_id.substring(0, 8)}
+            </p>
+            <p className="text-xs text-muted-foreground/80 line-clamp-1">
+              {latestLog.details || task.description}
+            </p>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {new Date(latestLog.timestamp * 1000).toLocaleTimeString()}
+            </span>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
