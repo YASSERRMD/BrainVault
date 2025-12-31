@@ -20,6 +20,8 @@ services:
     depends_on:
       - barq-vector
       - barq-graph
+    env_file:
+      - .env
     environment:
       - VECTOR_DB_URL=http://barq-vector:9200
       - GRAPH_DB_URL=http://barq-graph:7687
