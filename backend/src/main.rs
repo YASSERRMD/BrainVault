@@ -1,8 +1,9 @@
 use actix_web::{web, App, HttpServer};
-use brainvault_backend::api::handlers::knowledge;
+use brainvault_backend::api::handlers::{knowledge, agents};
 use brainvault_backend::core::search_engine::{HybridSearchEngine, SearchWeights};
 use brainvault_backend::core::graph_manager::KnowledgeGraphManager;
 use brainvault_backend::core::rbac::{RBAC, Role, Permission};
+use brainvault_backend::core::agent_orchestrator::{AgentOrchestrator, AgentProfile, AgentType};
 use brainvault_backend::db::barq_vector::BarqVectorClient;
 use brainvault_backend::db::barq_graph::BarqGraphClient;
 
@@ -37,19 +38,34 @@ async fn main() -> std::io::Result<()> {
         accessible_collections: vec![],
     });
 
+    // Initialize Agent Orchestrator
+    let orchestrator = AgentOrchestrator::new();
+    // Register a default agent
+    orchestrator.register_agent(AgentProfile {
+        id: "default_agent".to_string(),
+        name: "Default Agent".to_string(),
+        agent_type: AgentType::Manager,
+        capabilities: vec!["general".to_string()],
+    }).await;
+
     // Wrap in Data (Arc)
     let search_data = web::Data::new(search_engine);
     let graph_data = web::Data::new(graph_manager);
     let rbac_data = web::Data::new(rbac);
+    let orch_data = web::Data::new(orchestrator);
 
     HttpServer::new(move || {
         App::new()
             .app_data(search_data.clone())
             .app_data(graph_data.clone())
             .app_data(rbac_data.clone())
+            .app_data(orch_data.clone())
             .service(knowledge::ingest_knowledge)
             .service(knowledge::hybrid_search)
             .service(knowledge::get_context)
+            .service(agents::submit_task)
+            .service(agents::get_task_status)
+            .service(agents::register_agent)
     })
     .bind(("0.0.0.0", 8080))?
     .run()

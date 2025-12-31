@@ -38,6 +38,7 @@ pub struct Task {
     pub result: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct AgentOrchestrator {
     agents: Arc<Mutex<HashMap<String, AgentProfile>>>,
     tasks: Arc<Mutex<HashMap<String, Task>>>,
