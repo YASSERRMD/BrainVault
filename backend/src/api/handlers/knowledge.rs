@@ -123,6 +123,17 @@ pub async fn get_document(
     }
 }
 
+#[get("/api/documents")]
+pub async fn list_all_documents(
+    engine: web::Data<HybridSearchEngine>,
+) -> impl Responder {
+    let documents = engine.vector_db.list_all_documents().await;
+    HttpResponse::Ok().json(serde_json::json!({
+        "documents": documents,
+        "count": documents.len()
+    }))
+}
+
 #[post("/api/search")]
 pub async fn hybrid_search(
     query: web::Json<SearchQuery>,

@@ -206,6 +206,15 @@ impl BarqVectorClient {
         cache.len()
     }
 
+    pub async fn list_all_documents(&self) -> Vec<SearchHit> {
+        let cache = self.content_cache.read().await;
+        cache.iter().map(|(id, content)| SearchHit {
+            doc_id: id.clone(),
+            score: 1.0,
+            content: Some(content.clone()),
+        }).collect()
+    }
+
     // Backward compatibility
     pub async fn index_vector(&self, doc_id: &str, content: &str) -> Result<(), reqwest::Error> {
         let _ = self.index_document(doc_id, content).await;
