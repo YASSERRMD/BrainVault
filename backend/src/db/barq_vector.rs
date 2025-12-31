@@ -135,52 +135,7 @@ impl BarqVectorClient {
     }
 
     pub async fn semantic_search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>, String> {
-        // Generate query embedding
-        let query_embedding = if let Some(embedding_client) = AzureEmbeddingClient::new() {
-            match embedding_client.get_embedding(query).await {
-                Ok(emb) => emb,
-                Err(e) => {
-                    println!("WARN: Query embedding failed: {}. Using local search.", e);
-                    return self.local_search(query, top_k).await;
-                }
-            }
-        } else {
-            println!("WARN: No embedding client. Using local search.");
-            return self.local_search(query, top_k).await;
-        };
-
-        // Try Barq search
-        let url = format!("{}/collections/{}/search", self.base_url, self.collection_name);
-        let body = SearchRequest {
-            vector: query_embedding.clone(),
-            top_k,
-        };
-
-        match self.client.post(&url).json(&body).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    if let Ok(search_resp) = resp.json::<SearchResponse>().await {
-                        let cache = self.content_cache.read().await;
-                        let hits: Vec<SearchHit> = search_resp.results.into_iter().map(|r| {
-                            let content = r.payload
-                                .and_then(|p| p.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()))
-                                .or_else(|| cache.get(&r.id).cloned());
-                            SearchHit {
-                                doc_id: r.id,
-                                score: r.score,
-                                content,
-                            }
-                        }).collect();
-                        return Ok(hits);
-                    }
-                }
-            }
-            Err(e) => {
-                println!("WARN: Barq search failed: {}", e);
-            }
-        }
-
-        // Fallback to local search
+        // Use local BM25-style search since embeddings may not be available
         self.local_search(query, top_k).await
     }
 
