@@ -9,4 +9,10 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.11", features = ["json"] }
-# Placeholder for barq-db dependencies if they exist as crates, or we'll define them later
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "search_benchmark"
+harness = false
