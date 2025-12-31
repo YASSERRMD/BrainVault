@@ -12,6 +12,7 @@ pub struct TaskResponse {
     pub task_id: String,
     pub status: String,
     pub result: Option<String>,
+    pub audit_log: Vec<crate::core::agent_orchestrator::AuditLogEntry>,
 }
 
 #[post("/api/agents/task")]
@@ -43,6 +44,7 @@ pub async fn get_task_status(
             task_id: task.id,
             status: format!("{:?}", task.status),
             result: task.result,
+            audit_log: task.audit_log,
         }),
         None => HttpResponse::NotFound().body("Task not found"),
     }

@@ -36,6 +36,26 @@ pub struct Task {
     pub status: TaskStatus,
     pub assigned_agent_id: Option<String>,
     pub result: Option<String>,
+    pub audit_log: Vec<AuditLogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogEntry {
+    pub timestamp: u64, // simplified ts
+    pub agent_id: Option<String>,
+    pub action: String,
+    pub details: String,
+}
+
+impl Task {
+    pub fn add_log(&mut self, agent_id: Option<String>, action: String, details: String) {
+        self.audit_log.push(AuditLogEntry {
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            agent_id,
+            action,
+            details,
+        });
+    }
 }
 
 use crate::core::search_engine::HybridSearchEngine;
@@ -69,13 +89,16 @@ impl AgentOrchestrator {
 
     pub async fn submit_task(&self, description: String) -> String {
         let task_id = Uuid::new_v4().to_string();
-        let task = Task {
+        let mut task = Task {
             id: task_id.clone(),
-            description,
+            description: description.clone(),
             status: TaskStatus::Pending,
             assigned_agent_id: None,
             result: None,
+            audit_log: Vec::new(),
         };
+        
+        task.add_log(None, "SUBMITTED".to_string(), format!("Task submitted: {}", description));
         
         let mut tasks = self.tasks.lock().await;
         tasks.insert(task_id.clone(), task);
@@ -95,6 +118,7 @@ impl AgentOrchestrator {
         if let Some((agent_id, _)) = agents.iter().next() {
             task.assigned_agent_id = Some(agent_id.clone());
             task.status = TaskStatus::InProgress;
+            task.add_log(Some("system".to_string()), "ASSIGNED".to_string(), format!("Assigned to agent {}", agent_id));
             return Ok(agent_id.clone());
         }
 
@@ -105,7 +129,8 @@ impl AgentOrchestrator {
         let mut tasks = self.tasks.lock().await;
         let task = tasks.get_mut(task_id).ok_or("Task not found")?;
         task.status = TaskStatus::Completed;
-        task.result = Some(result);
+        task.result = Some(result.clone());
+        task.add_log(task.assigned_agent_id.clone(), "COMPLETED".to_string(), format!("Task completed with result: {}", result)); 
         Ok(())
     }
 
