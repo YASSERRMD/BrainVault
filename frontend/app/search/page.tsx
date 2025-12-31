@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Search, Loader2, FileText, ArrowRight, Database, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
+import Link from "next/link";
 
 interface SearchHit {
     doc_id: string;
@@ -135,9 +136,12 @@ export default function SearchPage() {
                                     </p>
 
                                     <div className="mt-4 pt-4 border-t border-border flex items-center justify-end">
-                                        <button className="text-sm font-medium text-primary flex items-center gap-1 hover:gap-2 transition-all">
+                                        <Link
+                                            href={`/documents/${encodeURIComponent(hit.doc_id)}`}
+                                            className="text-sm font-medium text-primary flex items-center gap-1 hover:gap-2 transition-all"
+                                        >
                                             View Details <ArrowRight className="h-3 w-3" />
-                                        </button>
+                                        </Link>
                                     </div>
                                 </div>
                             ))

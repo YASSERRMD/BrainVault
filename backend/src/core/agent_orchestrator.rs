@@ -182,7 +182,25 @@ impl AgentOrchestrator {
                     
                     let result = self.execute_agent_logic(&profile, &description).await;
                     
-                    // 3. Update task
+                    // 3. Store the result in the knowledge base
+                    if let Some(ref engine) = self.search_engine {
+                        let doc_id = format!("agent-result-{}", task_id);
+                        let content = format!(
+                            "Agent Task Result\nTask ID: {}\nAgent: {} ({})\nQuery: {}\n\n{}",
+                            task_id,
+                            profile.name,
+                            format!("{:?}", profile.agent_type),
+                            description,
+                            result
+                        );
+                        if let Err(e) = engine.ingest_document(&doc_id, &content).await {
+                            println!("WARN: Failed to store agent result: {}", e);
+                        } else {
+                            println!("INFO: Stored agent result as document '{}'", doc_id);
+                        }
+                    }
+                    
+                    // 4. Update task
                     let _ = self.complete_task(&task_id, result).await;
                     println!("DEBUG: Agent {} completed task {}", agent_id, task_id);
                 }

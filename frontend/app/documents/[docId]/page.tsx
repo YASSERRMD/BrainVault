@@ -1,0 +1,130 @@
+"use client";
+
+import React from "react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, FileText, Calendar, Hash, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
+import useSWR from "swr";
+
+interface SearchHit {
+    doc_id: string;
+    score: number;
+    content: string | null;
+}
+
+interface SearchResponse {
+    hits: SearchHit[];
+}
+
+const fetcher = async (url: string, docId: string) => {
+    // Search for the specific document
+    const response = await api.post<SearchResponse>("/search", {
+        q: docId,
+        top_k: 10
+    });
+    // Find exact match
+    const doc = response.data.hits.find(h => h.doc_id === docId);
+    if (!doc) {
+        throw new Error("Document not found");
+    }
+    return doc;
+};
+
+export default function DocumentDetailPage() {
+    const params = useParams();
+    const router = useRouter();
+    const docId = params.docId as string;
+
+    const { data: doc, error, isLoading } = useSWR(
+        docId ? ["doc", docId] : null,
+        () => fetcher("/search", docId)
+    );
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-[50vh]">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (error || !doc) {
+        return (
+            <div className="max-w-4xl mx-auto space-y-8">
+                <button
+                    onClick={() => router.back()}
+                    className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Search
+                </button>
+                <div className="text-center py-16">
+                    <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h2 className="text-xl font-semibold mb-2">Document Not Found</h2>
+                    <p className="text-muted-foreground">
+                        The document "{docId}" could not be found in the knowledge base.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-4xl mx-auto space-y-8">
+            <button
+                onClick={() => router.back()}
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Search
+            </button>
+
+            <div className="p-8 rounded-xl bg-card border border-border">
+                <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500">
+                            <FileText className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold">{doc.doc_id}</h1>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                    <Hash className="w-3 h-3" />
+                                    {doc.doc_id}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Retrieved just now
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-sm font-medium border border-green-500/20">
+                        Score: {(doc.score * 100).toFixed(0)}%
+                    </div>
+                </div>
+
+                <div className="border-t border-border pt-6">
+                    <h2 className="text-sm font-medium text-muted-foreground mb-3">CONTENT</h2>
+                    <div className="prose prose-invert max-w-none">
+                        <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                            {doc.content || "No content available for this document."}
+                        </p>
+                    </div>
+                </div>
+
+                {doc.doc_id.startsWith("agent-result-") && (
+                    <div className="mt-6 p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                        <div className="flex items-center gap-2 text-purple-400 text-sm font-medium mb-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-500" />
+                            Agent-Generated Content
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            This document was automatically generated by an AI agent as part of a research or analysis task.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
