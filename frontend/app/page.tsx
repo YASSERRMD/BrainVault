@@ -49,6 +49,7 @@ export default function Dashboard() {
           subLabel="2 idle, 1 processing"
           trend="+12%"
           color="blue"
+          href="/agents"
         />
         <StatCard
           icon={<Zap />}
@@ -57,6 +58,7 @@ export default function Dashboard() {
           subLabel="In the last 24h"
           trend="+8%"
           color="purple"
+          href="/agents"
         />
         <StatCard
           icon={<Database />}
@@ -65,6 +67,7 @@ export default function Dashboard() {
           subLabel="Indexed documents"
           trend="+5%"
           color="amber"
+          href="/search"
         />
         <StatCard
           icon={<Shield />}
@@ -73,6 +76,7 @@ export default function Dashboard() {
           subLabel="RBAC Enforcement Active"
           trend="100%"
           color="green"
+          href="/security"
         />
       </div>
 
@@ -140,32 +144,38 @@ function RecentActivityFeed() {
           ? task.audit_log[task.audit_log.length - 1]
           : { action: "CREATED", timestamp: Date.now() / 1000 };
 
+        const status = task.status.replace(/"/g, ''); // Clean quotes
+
         return (
-          <div key={task.task_id + i} className="relative animate-fade-in">
+          <Link key={task.task_id + i} href={`/agents/${task.task_id}`} className="block group relative animate-fade-in pl-2 rounded-lg hover:bg-secondary/30 transition-colors p-2 -ml-2">
             <div className={clsx(
-              "absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-background",
-              task.status.includes("Completed") ? "bg-green-500" :
-                task.status.includes("InProgress") ? "bg-blue-500 animate-pulse" :
-                  task.status.includes("Failed") ? "bg-red-500" :
+              "absolute -left-[21px] top-3 w-3 h-3 rounded-full border-2 border-background ring-2 ring-background group-hover:ring-primary/20 transition-all",
+              status === "Completed" ? "bg-green-500" :
+                status === "InProgress" ? "bg-blue-500 animate-pulse" :
+                  status === "Failed" ? "bg-red-500" :
                     "bg-slate-500"
             )} />
-            <p className="text-sm text-foreground font-medium">
-              {latestLog.action}: {task.task_id.substring(0, 8)}
-            </p>
-            <p className="text-xs text-muted-foreground/80 line-clamp-1">
-              {latestLog.details || task.description}
-            </p>
-            <span className="text-[10px] text-muted-foreground font-mono">
-              {new Date(latestLog.timestamp * 1000).toLocaleTimeString()}
-            </span>
-          </div>
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm text-foreground font-medium group-hover:text-primary transition-colors">
+                  {latestLog.action}: {task.task_id.substring(0, 8)}...
+                </p>
+                <p className="text-xs text-muted-foreground/80 line-clamp-1 mt-0.5">
+                  {latestLog.details || task.description}
+                </p>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {new Date(latestLog.timestamp * 1000).toLocaleTimeString()}
+              </span>
+            </div>
+          </Link>
         );
       })}
     </>
   );
 }
 
-function StatCard({ icon, label, value, subLabel, trend, color }: any) {
+function StatCard({ icon, label, value, subLabel, trend, color, href }: any) {
   const colorMap: Record<string, string> = {
     blue: "text-blue-500 bg-blue-500/10 border-blue-500/20",
     purple: "text-purple-500 bg-purple-500/10 border-purple-500/20",
@@ -173,19 +183,24 @@ function StatCard({ icon, label, value, subLabel, trend, color }: any) {
     green: "text-green-500 bg-green-500/10 border-green-500/20",
   };
 
-  return (
-    <div className="p-6 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all group">
+  const Content = (
+    <div className="p-6 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all group h-full cursor-pointer">
       <div className="flex justify-between items-start mb-4">
-        <div className={clsx("p-3 rounded-xl", colorMap[color])}>
+        <div className={clsx("p-3 rounded-xl transition-colors", colorMap[color], "group-hover:bg-opacity-20")}>
           {React.cloneElement(icon, { className: "w-6 h-6" })}
         </div>
         <span className={clsx("text-xs font-medium px-2 py-1 rounded-full bg-secondary text-foreground")}>
           {trend}
         </span>
       </div>
-      <h3 className="text-2xl font-bold text-foreground mb-1">{value}</h3>
+      <h3 className="text-2xl font-bold text-foreground mb-1 group-hover:text-primary transition-colors">{value}</h3>
       <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
       <p className="text-xs text-muted-foreground/60">{subLabel}</p>
     </div>
   );
+
+  if (href) {
+    return <Link href={href} className="block h-full">{Content}</Link>;
+  }
+  return Content;
 }
