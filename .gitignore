@@ -1,6 +1,8 @@
 brainvault_devplan.md
-/target
-/dist
-/node_modules
+target/
+**/target/
+dist/
+**/node_modules/
 .DS_Store
 .env
+*.log
