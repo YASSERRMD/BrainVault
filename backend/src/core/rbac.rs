@@ -1,4 +1,5 @@
 use crate::core::search_engine::SearchResults;
+use crate::core::graph_manager::ContextGraph;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -61,21 +62,18 @@ impl RBAC {
         SearchResults { hits: vec![] }
     }
     
-    pub async fn filter_context(&self, user_id: &str, context: crate::db::barq_graph::ContextGraph) -> Result<crate::db::barq_graph::ContextGraph, String> {
+    pub async fn filter_context(&self, user_id: &str, context: ContextGraph) -> Result<ContextGraph, String> {
          let perm = self.get_permission(user_id).await?;
          if perm.role == Role::Admin {
              return Ok(context);
          }
          
-         let nodes: Vec<_> = context.nodes.into_iter()
-             .filter(|n| perm.accessible_entities.contains(&n.id))
+         let entities: Vec<_> = context.entities.into_iter()
+             .filter(|e| perm.accessible_entities.contains(&e.id))
              .collect();
              
-         // Also filter relationships where both endpoints are visible?
-         // For now keep it simple and just return filtered nodes.
-         
-         Ok(crate::db::barq_graph::ContextGraph {
-             nodes,
+         Ok(ContextGraph {
+             entities,
              relationships: context.relationships, 
          })
     }
