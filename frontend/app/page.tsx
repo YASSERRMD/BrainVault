@@ -2,16 +2,21 @@
 
 import React from "react";
 import { Activity, Shield, Users, Database, Zap, Cpu } from "lucide-react";
-import { api, SystemStats } from "@/lib/api";
+import { api, SystemStats, KnowledgeStats } from "@/lib/api";
 import useSWR from "swr";
 import { clsx } from "clsx";
 import Link from "next/link";
 
-const fetcher = (url: string) => api.get<SystemStats>(url).then((res) => res.data);
+const statsFetcher = (url: string) => api.get<SystemStats>(url).then((res) => res.data);
+const knowledgeFetcher = (url: string) => api.get<KnowledgeStats>(url).then((res) => res.data);
 
 export default function Dashboard() {
-  const { data: stats, error } = useSWR("/agents/stats", fetcher, {
+  const { data: stats, error } = useSWR("/agents/stats", statsFetcher, {
     refreshInterval: 5000,
+  });
+
+  const { data: knowledgeStats } = useSWR("/knowledge/stats", knowledgeFetcher, {
+    refreshInterval: 10000,
   });
 
   const loading = !stats && !error;
@@ -64,9 +69,9 @@ export default function Dashboard() {
         <StatCard
           icon={<Database />}
           label="Knowledge Vectors"
-          value="12,504"
-          subLabel="Indexed documents"
-          trend="+5%"
+          value={knowledgeStats?.documents?.toString() || "0"}
+          subLabel={`${knowledgeStats?.entities || 0} entities, ${knowledgeStats?.relationships || 0} relations`}
+          trend="Real-time"
           color="amber"
           href="/search"
         />

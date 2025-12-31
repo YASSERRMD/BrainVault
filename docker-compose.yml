@@ -2,14 +2,15 @@ services:
   barq-vector:
     image: barq-db:latest
     ports:
-      - "9200:9200" # Vector DB
+      - "50051:50051" # gRPC
+      - "9200:8080" # REST API
     environment:
       - VECTOR_DB_MEMORY_MB=1024
 
   barq-graph:
     image: barq-graphdb:latest
     ports:
-      - "7687:7687" # Graph DB
+      - "7687:3000" # Graph REST API
     environment:
       - GRAPH_DB_MEMORY_MB=512
 
@@ -23,8 +24,9 @@ services:
     env_file:
       - .env
     environment:
-      - VECTOR_DB_URL=http://barq-vector:9200
-      - GRAPH_DB_URL=http://barq-graph:7687
+      - VECTOR_DB_URL=http://barq-vector:8080
+      - VECTOR_DB_GRPC_URL=http://barq-vector:50051
+      - GRAPH_DB_URL=http://barq-graph:3000
 
   brainvault-frontend:
     build: ./frontend

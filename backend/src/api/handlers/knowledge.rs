@@ -46,6 +46,63 @@ pub async fn ingest_knowledge(
     HttpResponse::Ok().json(serde_json::json!({"status": "ingested", "doc_id": req.doc_id}))
 }
 
+#[post("/api/knowledge/seed")]
+pub async fn seed_test_data(
+    engine: web::Data<HybridSearchEngine>,
+    graph: web::Data<KnowledgeGraphManager>,
+) -> impl Responder {
+    // Sample enterprise knowledge documents
+    let test_docs = vec![
+        ("doc-001", "Quantum computing leverages quantum mechanical phenomena like superposition and entanglement to process information. Unlike classical computers that use bits (0 or 1), quantum computers use qubits that can exist in multiple states simultaneously."),
+        ("doc-002", "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience. Deep learning uses neural networks with multiple layers to extract higher-level features from raw input."),
+        ("doc-003", "Cybersecurity best practices include implementing zero-trust architecture, regular security audits, encryption of data at rest and in transit, and continuous monitoring for threats and anomalies."),
+        ("doc-004", "Cloud computing provides on-demand access to computing resources including servers, storage, databases, networking, and software. Major providers include AWS, Azure, and Google Cloud Platform."),
+        ("doc-005", "Natural Language Processing (NLP) enables computers to understand, interpret, and generate human language. Key applications include sentiment analysis, machine translation, and conversational AI."),
+        ("doc-006", "Blockchain technology provides a decentralized, immutable ledger for recording transactions. Smart contracts automate the execution of agreements without intermediaries."),
+        ("doc-007", "Kubernetes orchestrates containerized applications, managing deployment, scaling, and operations. It works with Docker and other container runtimes to ensure high availability."),
+        ("doc-008", "DevOps practices combine software development and IT operations to shorten development cycles. CI/CD pipelines automate testing and deployment processes."),
+    ];
+
+    let mut ingested = 0;
+    for (doc_id, content) in &test_docs {
+        if let Ok(()) = engine.ingest_document(doc_id, content).await {
+            ingested += 1;
+        }
+    }
+
+    // Add some graph entities
+    let entities = vec![
+        Entity { id: "quantum-comp".to_string(), label: "Technology".to_string(), properties: std::collections::HashMap::from([("name".to_string(), "Quantum Computing".to_string())]) },
+        Entity { id: "machine-learning".to_string(), label: "Technology".to_string(), properties: std::collections::HashMap::from([("name".to_string(), "Machine Learning".to_string())]) },
+        Entity { id: "cybersecurity".to_string(), label: "Domain".to_string(), properties: std::collections::HashMap::from([("name".to_string(), "Cybersecurity".to_string())]) },
+    ];
+
+    for entity in entities {
+        let _ = graph.add_entity(entity).await;
+    }
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "seeded",
+        "documents_ingested": ingested,
+        "message": format!("Successfully seeded {} documents with embeddings", ingested)
+    }))
+}
+
+#[get("/api/knowledge/stats")]
+pub async fn get_knowledge_stats(
+    engine: web::Data<HybridSearchEngine>,
+    graph: web::Data<KnowledgeGraphManager>,
+) -> impl Responder {
+    let doc_count = engine.get_document_count().await;
+    let (entity_count, relationship_count) = graph.get_stats().await;
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "documents": doc_count,
+        "entities": entity_count,
+        "relationships": relationship_count
+    }))
+}
+
 #[post("/api/search")]
 pub async fn hybrid_search(
     query: web::Json<SearchQuery>,

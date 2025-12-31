@@ -34,9 +34,17 @@ impl HybridSearchEngine {
         }
     }
 
-    pub async fn search(&self, query: &str, top_k: usize) -> Result<SearchResults, Box<dyn std::error::Error>> {
-        let vector_results = self.vector_db.semantic_search(query, top_k).await?;
-        let lexical_results = self.vector_db.bm25_search(query, top_k).await?;
+    pub async fn search(&self, query: &str, top_k: usize) -> Result<SearchResults, Box<dyn std::error::Error + Send + Sync>> {
+        let vector_results = self.vector_db.semantic_search(query, top_k).await
+            .unwrap_or_else(|e| {
+                println!("WARN: Semantic search failed: {}", e);
+                vec![]
+            });
+        let lexical_results = self.vector_db.bm25_search(query, top_k).await
+            .unwrap_or_else(|e| {
+                println!("WARN: BM25 search failed: {}", e);
+                vec![]
+            });
         
         let merged = self.merge_results(vector_results, lexical_results);
         Ok(merged)
@@ -44,7 +52,7 @@ impl HybridSearchEngine {
     
     fn merge_results(&self, vector_hits: Vec<DbHit>, bm25_hits: Vec<DbHit>) -> SearchResults {
         let mut scores: HashMap<String, f32> = HashMap::new();
-        let mut content_map: HashMap<String, String> = HashMap::new();
+        let mut content_map: HashMap<String, Option<String>> = HashMap::new();
         
         for hit in vector_hits {
             *scores.entry(hit.doc_id.clone()).or_insert(0.0) += hit.score * self.lexical_weights.vector_weight;
@@ -60,7 +68,7 @@ impl HybridSearchEngine {
             SearchHit {
                 doc_id: id.clone(),
                 score,
-                content: content_map.get(&id).cloned(),
+                content: content_map.get(&id).cloned().flatten(),
             }
         }).collect();
         // Sort by score descending
@@ -69,9 +77,14 @@ impl HybridSearchEngine {
         SearchResults { hits }
     }
     
-    pub async fn ingest_document(&self, doc_id: &str, content: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.vector_db.index_vector(doc_id, content).await?;
-        self.vector_db.index_bm25(doc_id, content).await?;
+    pub async fn ingest_document(&self, doc_id: &str, content: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.vector_db.index_document(doc_id, content).await
+            .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<dyn std::error::Error + Send + Sync>)?;
         Ok(())
     }
+
+    pub async fn get_document_count(&self) -> usize {
+        self.vector_db.get_document_count().await
+    }
 }
+

@@ -48,3 +48,9 @@ export interface SystemStats {
     active_agents: number;
     system_status: string;
 }
+
+export interface KnowledgeStats {
+    documents: number;
+    entities: number;
+    relationships: number;
+}
