@@ -5,6 +5,7 @@ import { Activity, Shield, Users, Database, Zap, Cpu } from "lucide-react";
 import { api, SystemStats } from "@/lib/api";
 import useSWR from "swr";
 import { clsx } from "clsx";
+import Link from "next/link";
 
 const fetcher = (url: string) => api.get<SystemStats>(url).then((res) => res.data);
 
