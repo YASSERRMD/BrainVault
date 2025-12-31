@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1.76-slim-bullseye as builder
+FROM rust:latest as builder
 
 WORKDIR /usr/src/app
 COPY . .
@@ -7,7 +7,7 @@ COPY . .
 RUN cargo build --release
 
 # Runtime Stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 WORKDIR /usr/local/bin
 
