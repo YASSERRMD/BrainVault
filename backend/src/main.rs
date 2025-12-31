@@ -88,6 +88,8 @@ async fn main() -> std::io::Result<()> {
             .service(knowledge::get_context)
             .service(agents::submit_task)
             .service(agents::get_task_status)
+            .service(agents::get_stats)
+            .service(agents::get_all_tasks)
             .service(agents::register_agent)
     })
     .bind(("0.0.0.0", 8080))?

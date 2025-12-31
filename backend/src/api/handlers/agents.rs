@@ -50,6 +50,34 @@ pub async fn get_task_status(
     }
 }
 
+#[get("/api/agents/stats")]
+pub async fn get_stats(
+    orchestrator: web::Data<AgentOrchestrator>,
+) -> impl Responder {
+    let (tasks, agents) = orchestrator.get_stats().await;
+    HttpResponse::Ok().json(serde_json::json!({
+        "active_tasks": tasks,
+        "active_agents": agents,
+        "system_status": "Operational"
+    }))
+}
+
+#[get("/api/agents/tasks")]
+pub async fn get_all_tasks(
+    orchestrator: web::Data<AgentOrchestrator>,
+) -> impl Responder {
+    let tasks = orchestrator.get_all_tasks().await;
+    // Map to TaskResponse
+    let response: Vec<TaskResponse> = tasks.into_iter().map(|t| TaskResponse {
+        task_id: t.id,
+        status: format!("{:?}", t.status),
+        result: t.result,
+        audit_log: t.audit_log,
+    }).collect();
+    
+    HttpResponse::Ok().json(response)
+}
+
 #[post("/api/agents/register")]
 pub async fn register_agent(
     req: web::Json<AgentProfile>,

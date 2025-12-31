@@ -42,3 +42,9 @@ export interface TaskResponse {
 export interface TaskRequest {
     description: string;
 }
+
+export interface SystemStats {
+    active_tasks: number;
+    active_agents: number;
+    system_status: string;
+}

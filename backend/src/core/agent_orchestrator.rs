@@ -138,6 +138,17 @@ impl AgentOrchestrator {
         let tasks = self.tasks.lock().await;
         tasks.get(task_id).cloned()
     }
+
+    pub async fn get_all_tasks(&self) -> Vec<Task> {
+        let tasks = self.tasks.lock().await;
+        tasks.values().cloned().collect()
+    }
+    
+    pub async fn get_stats(&self) -> (usize, usize) {
+        let tasks = self.tasks.lock().await;
+        let agents = self.agents.lock().await;
+        (tasks.len(), agents.len())
+    }
     
     // The background worker that processes tasks
     pub async fn run_agent_loop(&self) {

@@ -11,13 +11,21 @@ import {
     ArrowRight
 } from "lucide-react";
 import Link from "next/link";
-import { api, TaskRequest, TaskResponse } from "@/lib/api";
+import { api, TaskResponse } from "@/lib/api";
+import useSWR from "swr";
 import { clsx } from "clsx";
+
+const fetcher = (url: string) => api.get<TaskResponse[]>(url).then((res) => res.data);
 
 export default function AgentsPage() {
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
-    const [recentTasks, setRecentTasks] = useState<TaskResponse[]>([]);
+
+    // Real-time task list
+    const { data: tasks, error, mutate } = useSWR("/agents/tasks", fetcher, {
+        refreshInterval: 2000,
+        fallbackData: []
+    });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,19 +33,11 @@ export default function AgentsPage() {
 
         setSubmitting(true);
         try {
-            const response = await api.post<{ task_id: string, status: string }>("/agents/task", {
+            await api.post<{ task_id: string, status: string }>("/agents/task", {
                 description: description,
             });
-
-            // Mock adding to local list for immediate feedback (since we don't have a list endpoint yet)
-            const newTask: TaskResponse = {
-                task_id: response.data.task_id,
-                status: "Pending", // Usually starts as pending
-                result: null,
-                audit_log: []
-            };
-
-            setRecentTasks([newTask, ...recentTasks]);
+            // Force refresh
+            mutate();
             setDescription("");
         } catch (err) {
             console.error("Task submission failed", err);
@@ -47,19 +47,25 @@ export default function AgentsPage() {
         }
     };
 
+    // Sort tasks by time (newest first - strictly speaking we'd need timestamps on TaskResponse, 
+    // but let's assume backend returns in stable order or we map ID. 
+    // In a real app we'd add `created_at` to TaskResponse).
+    // For now, we trust the order or reverse it.
+    const displayTasks = tasks ? [...tasks].reverse() : [];
+
     return (
         <div className="max-w-6xl mx-auto space-y-8">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-foreground">Agent Orchestration</h1>
                     <p className="text-muted-foreground mt-1">
-                        Delegate complex tasks to autonomous AI agents.
+                        Delegate complex tasks to autonomous AI agents (Powered by Cohere).
                     </p>
                 </div>
                 <div className="flex gap-2">
                     <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-sm font-medium border border-green-500/20">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        System Active
+                        Orchestrator Online
                     </div>
                 </div>
             </div>
@@ -80,7 +86,7 @@ export default function AgentsPage() {
                                 <textarea
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="e.g., Research the impact of quantum computing on modern cryptography protocols..."
+                                    placeholder="e.g., Analyze the latest trends in quantum cryptography..."
                                     className="w-full h-40 p-3 rounded-lg bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none text-sm placeholder:text-muted-foreground/50"
                                 />
                             </div>
@@ -97,7 +103,7 @@ export default function AgentsPage() {
                                 {submitting ? "Assigning..." : "Assign Task"}
                             </button>
                             <p className="text-xs text-muted-foreground text-center">
-                                Orchestrator will automatically assign an appropriate agent.
+                                Task will be processed by Cohere LLM Agents.
                             </p>
                         </form>
                     </div>
@@ -110,7 +116,7 @@ export default function AgentsPage() {
                         Active Operations
                     </h3>
 
-                    {recentTasks.length === 0 ? (
+                    {displayTasks.length === 0 ? (
                         <div className="p-12 rounded-xl bg-secondary/20 border border-dashed border-border text-center">
                             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4 text-muted-foreground">
                                 <Cpu className="w-8 h-8" />
@@ -120,7 +126,7 @@ export default function AgentsPage() {
                         </div>
                     ) : (
                         <div className="space-y-4 animate-fade-in">
-                            {recentTasks.map((task) => (
+                            {displayTasks.map((task) => (
                                 <div key={task.task_id} className="p-5 rounded-xl bg-card border border-border hover:border-primary/50 transition-all group relative overflow-hidden">
                                     <div className="flex items-start justify-between mb-2">
                                         <div className="flex items-center gap-3">
@@ -137,18 +143,15 @@ export default function AgentsPage() {
                                         </Link>
                                     </div>
                                     <p className="text-foreground font-medium line-clamp-2">
-                                        {task.result || "Processing task..."}
-                                        {/* Note: we might not have descriptions in the response if we just blindly pushed from submit response, 
-                                    but usually we'd re-fetch. For now this is a placeholder. 
-                                    Ideally we'd fetch the task details or store the description locally. */}
+                                        {task.result || task.audit_log.find(l => l.action === "SUBMITTED")?.details || "Processing..."}
                                     </p>
 
                                     {/* Simple progress bar simulation */}
                                     <div className="mt-4 h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                                         <div className={clsx(
                                             "h-full transition-all duration-1000",
-                                            task.status === 'Completed' ? "w-full bg-green-500" :
-                                                task.status === 'InProgress' ? "w-1/2 bg-blue-500 animate-pulse" :
+                                            task.status === '"Completed"' || task.status === 'Completed' ? "w-full bg-green-500" :
+                                                task.status === '"InProgress"' || task.status === 'InProgress' ? "w-1/2 bg-blue-500 animate-pulse" :
                                                     "w-5 bg-slate-500"
                                         )} />
                                     </div>
@@ -163,7 +166,10 @@ export default function AgentsPage() {
 }
 
 function getStatusBadge(status: string) {
-    switch (status) {
+    // Handle potential double quotes from debug format
+    const cleanStatus = status.replace(/"/g, '');
+
+    switch (cleanStatus) {
         case "Completed":
             return (
                 <span className="flex items-center gap-1 text-xs font-medium text-green-500">
