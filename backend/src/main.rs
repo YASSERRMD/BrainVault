@@ -95,6 +95,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
+            .app_data(web::JsonConfig::default().limit(52428800)) // 50MB limit
             .app_data(search_data.clone())
             .app_data(graph_data.clone())
             .app_data(rbac_data.clone())
