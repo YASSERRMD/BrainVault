@@ -15,11 +15,17 @@
 - [x] **Entity Extraction Pipeline**:
     - Triggered automatically upon document ingestion.
     - Uses LLM to extract Entities (Nodes) and Relationships (Edges).
-- [ ] **Graph-Augmented Retrieval (GraphRAG)**:
+- [x] **Graph-Augmented Retrieval (GraphRAG)**:
     - Update Chat to query the Graph for context, not just Vector DB.
     - Enable "Pathfinding" queries (e.g., "Connection between Project X and Client Y").
 
 ## Phase 4: Enterprise Security & Observability
-**Objective:** Production-readiness.
-- [ ] **RBAC Enforcement**: Lock down API endpoints based on User Roles (Admin vs User).
-- [ ] **Audit Dashboard**: Visualize agent actions and access logs.
+**Objective:** Make the system enterprise-ready with strict access controls and audit trails.
+- [ ] **RBAC Enforcement**:
+    - Metadata-based filtering in Vector Search (only return docs matching user role).
+    - Hard filtering in Graph traversal.
+- [x] **Audit Dashboard**:
+    - Centralized view of all Agent activities and Data Access logs.
+    - Visual "Security Command Center".
+
+
