@@ -276,6 +276,13 @@ impl AgentOrchestrator {
                 
                 call_llm(&analysis_prompt).await.unwrap_or_else(|e| format!("Analysis failed: {}", e))
             },
+            AgentType::Coder => {
+                let coder_prompt = format!(
+                    "You are an expert Software Engineer. Your task is to generate high-quality, production-ready code.\n\nTask: {}\n\nProvide the solution in a generic format (markdown code blocks) with brief explanations.", 
+                    description
+                );
+                call_llm(&coder_prompt).await.unwrap_or_else(|e| format!("Coding task failed: {}", e))
+            },
             _ => {
                 call_llm(description).await.unwrap_or_else(|e| format!("Task failed: {}", e))
             }
