@@ -61,7 +61,7 @@ pub struct BarqGraphClient {
     base_url: String,
     client: Client,
     id_counter: std::sync::Arc<tokio::sync::RwLock<u64>>,
-    label_to_id: std::sync::Arc<tokio::sync::RwLock<HashMap<String, u64>>>,
+    name_to_id: std::sync::Arc<tokio::sync::RwLock<HashMap<String, u64>>>,
 }
 
 impl BarqGraphClient {
@@ -71,7 +71,7 @@ impl BarqGraphClient {
             base_url,
             client: Client::new(),
             id_counter: std::sync::Arc::new(tokio::sync::RwLock::new(1)),
-            label_to_id: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            name_to_id: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
     }
 
@@ -106,7 +106,7 @@ impl BarqGraphClient {
         }
     }
 
-    pub async fn create_node(&self, label: &str, embedding: Option<Vec<f32>>) -> Result<u64, String> {
+    pub async fn create_node(&self, name: &str, label: &str, embedding: Option<Vec<f32>>) -> Result<u64, String> {
         let id = self.get_next_id().await;
         let url = format!("{}/nodes", self.base_url);
         
@@ -125,9 +125,9 @@ impl BarqGraphClient {
             .map_err(|e| format!("Create node failed: {}", e))?;
 
         if resp.status().is_success() {
-            // Cache the mapping
-            let mut map = self.label_to_id.write().await;
-            map.insert(label.to_string(), id);
+            // Cache the mapping of the unique name to Barq ID
+            let mut map = self.name_to_id.write().await;
+            map.insert(name.to_string(), id);
             Ok(id)
         } else {
             Err(format!("Create node failed: {}", resp.status()))
@@ -184,8 +184,8 @@ impl BarqGraphClient {
         }
     }
 
-    pub async fn get_node_id_by_label(&self, label: &str) -> Option<u64> {
-        let map = self.label_to_id.read().await;
-        map.get(label).copied()
+    pub async fn get_node_id_by_name(&self, name: &str) -> Option<u64> {
+        let map = self.name_to_id.read().await;
+        map.get(name).copied()
     }
 }

@@ -27,6 +27,10 @@ pub struct SearchResults {
 }
 
 impl HybridSearchEngine {
+    pub async fn check_health(&self) -> bool {
+        self.vector_db.health().await.unwrap_or(false)
+    }
+
     pub fn new(vector_db: BarqVectorClient, weights: SearchWeights) -> Self {
         Self {
             vector_db,

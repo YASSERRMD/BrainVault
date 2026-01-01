@@ -20,7 +20,26 @@ pub struct AuditManager {
 
 impl AuditManager {
     pub fn new() -> Self {
-        Self { logs: Arc::new(Mutex::new(Vec::new())) }
+        let data_path = std::env::var("DATA_PATH").unwrap_or_else(|_| "/data".to_string());
+        let log_file = format!("{}/audit_logs.json", data_path);
+        
+        let mut logs = Vec::new();
+        if let Ok(content) = std::fs::read_to_string(&log_file) {
+            if let Ok(loaded) = serde_json::from_str::<Vec<SecurityLog>>(&content) {
+                logs = loaded;
+            }
+        }
+
+        Self { logs: Arc::new(Mutex::new(logs)) }
+    }
+
+    pub async fn save_logs(&self) {
+        let data_path = std::env::var("DATA_PATH").unwrap_or_else(|_| "/data".to_string());
+        let log_file = format!("{}/audit_logs.json", data_path);
+        let logs = self.logs.lock().await;
+        if let Ok(content) = serde_json::to_string(&*logs) {
+            let _ = std::fs::write(log_file, content);
+        }
     }
     
     pub async fn log_event(&self, event: &str, user: &str, status: &str, risk: &str) {
@@ -32,12 +51,15 @@ impl AuditManager {
             status: status.to_string(),
             risk: risk.to_string(),
         };
-        let mut logs = self.logs.lock().await;
-        logs.push(log);
-        // Keep last 100 logs
-        if logs.len() > 100 {
-            logs.remove(0);
+        {
+            let mut logs = self.logs.lock().await;
+            logs.push(log);
+            // Keep last 100 logs
+            if logs.len() > 100 {
+                logs.remove(0);
+            }
         }
+        self.save_logs().await;
     }
     
     pub async fn get_logs(&self) -> Vec<SecurityLog> {

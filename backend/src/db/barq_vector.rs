@@ -49,12 +49,41 @@ pub struct BarqVectorClient {
 impl BarqVectorClient {
     pub fn new() -> Self {
         let base_url = env::var("VECTOR_DB_URL").unwrap_or_else(|_| "http://barq-vector:8080".to_string());
+        let data_path = env::var("DATA_PATH").unwrap_or_else(|_| "/data".to_string());
+        
+        let mut cache = HashMap::new();
+        let cache_file = format!("{}/vector_cache.json", data_path);
+        
+        if let Ok(content) = std::fs::read_to_string(&cache_file) {
+            if let Ok(loaded) = serde_json::from_str::<HashMap<String, String>>(&content) {
+                println!("INFO: Loaded {} documents from persistent cache", loaded.len());
+                cache = loaded;
+            }
+        }
+
         Self {
             base_url,
             collection_name: "brainvault_docs".to_string(),
             client: reqwest::Client::new(),
-            content_cache: Arc::new(RwLock::new(HashMap::new())),
+            content_cache: Arc::new(RwLock::new(cache)),
             dimension: 1536,
+        }
+    }
+
+    pub async fn save_cache(&self) {
+        let data_path = env::var("DATA_PATH").unwrap_or_else(|_| "/data".to_string());
+        let cache_file = format!("{}/vector_cache.json", data_path);
+        let cache = self.content_cache.read().await;
+        if let Ok(content) = serde_json::to_string(&*cache) {
+            let _ = std::fs::write(cache_file, content);
+        }
+    }
+
+    pub async fn health(&self) -> Result<bool, String> {
+        let url = format!("{}/health", self.base_url);
+        match self.client.get(&url).send().await {
+            Ok(resp) => Ok(resp.status().is_success()),
+            Err(e) => Err(format!("Health check failed: {}", e)),
         }
     }
 
@@ -91,15 +120,21 @@ impl BarqVectorClient {
                 Err(e) => {
                     println!("WARN: Embedding failed: {}. Storing locally only.", e);
                     // Store locally without Barq
-                    let mut cache = self.content_cache.write().await;
-                    cache.insert(doc_id.to_string(), content.to_string());
+                    {
+                        let mut cache = self.content_cache.write().await;
+                        cache.insert(doc_id.to_string(), content.to_string());
+                    }
+                    self.save_cache().await;
                     return Ok(());
                 }
             }
         } else {
             println!("WARN: No embedding client. Storing locally only.");
-            let mut cache = self.content_cache.write().await;
-            cache.insert(doc_id.to_string(), content.to_string());
+            {
+                let mut cache = self.content_cache.write().await;
+                cache.insert(doc_id.to_string(), content.to_string());
+            }
+            self.save_cache().await;
             return Ok(());
         };
 
@@ -128,8 +163,11 @@ impl BarqVectorClient {
         }
 
         // Always cache content locally
-        let mut cache = self.content_cache.write().await;
-        cache.insert(doc_id.to_string(), content.to_string());
+        {
+            let mut cache = self.content_cache.write().await;
+            cache.insert(doc_id.to_string(), content.to_string());
+        }
+        self.save_cache().await;
         
         Ok(())
     }

@@ -11,6 +11,7 @@ pub enum AgentType {
     Coder,
     Reviewer,
     Manager,
+    Ingestor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +31,6 @@ pub enum TaskStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
@@ -225,7 +225,7 @@ impl AgentOrchestrator {
         }
     }
     
-    async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str, current_task_id: &str) -> String {
+    async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str, _current_task_id: &str) -> String {
         use crate::core::llm::azure_openai::AzureOpenAIClient;
         
         // Helper to call LLM
@@ -312,51 +312,184 @@ impl AgentOrchestrator {
                 call_llm(&synthesis_prompt).await.unwrap_or("Synthesis Failed".into())
             },
             AgentType::Researcher => {
+                // Multi-step Research: Planning -> Search -> Fact Extraction -> Synthesis
                 let plan_prompt = format!(
-                    "You are a Lead Researcher. Break down this research topic into 3 specific search queries.\nTopic: '{}'\nOutput Format: just the 3 queries, one per line.", 
+                    "You are a Lead Researcher. Break down this research topic into 3 specific investigative search queries.\nTopic: '{}'\nOutput Format: just the queries, one per line.", 
                     description
                 );
                 
                 let queries = match call_llm(&plan_prompt).await {
-                    Ok(res) => res.lines().map(|s| s.trim().replace("- ", "").to_string()).collect::<Vec<String>>(),
+                    Ok(res) => res.lines()
+                        .map(|s| s.trim().trim_start_matches(|c: char| !c.is_alphanumeric()).to_string())
+                        .filter(|l| !l.is_empty())
+                        .take(3)
+                        .collect::<Vec<String>>(),
                     Err(_) => vec![description.to_string()]
                 };
                 
-                let mut accumulated_context = String::new();
+                let mut facts = Vec::new();
                 if let Some(ref engine) = self.search_engine {
                     for query in queries {
-                        // In a real swarm, researcher might create sub-research tasks too? No, keep simple.
-                        if let Ok(results) = engine.search(&query, 3).await {
-                            for hit in results.hits {
-                                accumulated_context.push_str(&format!("\nSource [{}]: {}\n", hit.doc_id, hit.content.unwrap_or_default()));
-                            }
+                        if let Ok(results) = engine.search(&query, 5).await {
+                             let context = results.hits.iter()
+                                .map(|h| format!("[Source {}]: {}", h.doc_id, h.content.as_deref().unwrap_or("")))
+                                .collect::<Vec<String>>()
+                                .join("\n");
+                             
+                             if !context.is_empty() {
+                                 let extract_prompt = format!(
+                                     "As a Researcher, extract key technical details and specific facts related to '{}' from these sources:\n{}\n\nReturn a bulleted list of facts.",
+                                     query, context
+                                 );
+                                 if let Ok(extracted) = call_llm(&extract_prompt).await {
+                                     facts.push(extracted);
+                                 }
+                             }
                         }
                     }
                 }
                 
                 let report_prompt = format!(
-                    "You are a Research Agent. Write a report on: '{}'.\nContext:\n{}", 
-                    description, accumulated_context
+                    "You are an expert Research Agent. Compile a comprehensive, highly detailed final research report on: '{}'.\n\nAggregated Research Facts gathered from the database:\n{}\n\nFinal Report Structure: Executive Summary, Key Findings (grouped by topic), and Technical Deep-Dive.", 
+                    description, facts.join("\n\n")
                 );
                 
-                call_llm(&report_prompt).await.unwrap_or_default()
+                call_llm(&report_prompt).await.unwrap_or_else(|_| "Research synthesis failed.".into())
             },
             AgentType::Analyst => {
+                // Analyst uses Graph context and Vector context to find correlations
+                let mut graph_context = String::new();
+                if let Some(ref graph) = self.graph_manager {
+                    let entities = graph.find_nodes_by_text(description).await;
+                    for ent in entities.iter().take(5) {
+                        if let Ok(ctx) = graph.find_related_context(&ent.id, 2).await {
+                            for rel in ctx.relationships {
+                                graph_context.push_str(&format!("Relationship: {} --[{}]--> {}\n", rel.from_id, rel.rel_type, rel.to_id));
+                            }
+                        }
+                    }
+                }
+
                 let analysis_prompt = format!(
-                    "You are a Senior Data Analyst. specific task: '{}'.\nAnalyze patterns/anomalies.", 
-                    description
+                    "You are a Senior Data Analyst. Analyze this objective: '{}'.\n\nKnowledge Graph Context:\n{}\n\nIdentify patterns, hidden correlations, and potential anomalies in this data. Provide an analytical summary with actionable insights.", 
+                    description, graph_context
                 );
-                call_llm(&analysis_prompt).await.unwrap_or_default()
+                call_llm(&analysis_prompt).await.unwrap_or_else(|_| "Analysis failed.".into())
             },
             AgentType::Coder => {
+                // Coder looks for existing patterns
+                let mut code_patterns = String::new();
+                if let Some(ref engine) = self.search_engine {
+                    if let Ok(hits) = engine.search(description, 3).await {
+                        for hit in hits.hits {
+                            if hit.doc_id.contains(".rs") || hit.doc_id.contains(".ts") || hit.doc_id.contains(".js") {
+                                code_patterns.push_str(&format!("// Reference from {}\n{}\n", hit.doc_id, hit.content.unwrap_or_default()));
+                            }
+                        }
+                    }
+                }
+
                 let coder_prompt = format!(
-                    "You are specific Software Engineer. Task: {}. Output code blocks.", 
-                    description
+                    "You are a Senior Software Engineer. Task: {}.\n\nReference Material Found:\n{}\n\nGenerate high-quality, production-ready code. Include comments and ensure best practices. Output blocks in Markdown.", 
+                    description, code_patterns
                 );
-                call_llm(&coder_prompt).await.unwrap_or_default()
+                call_llm(&coder_prompt).await.unwrap_or_else(|_| "Coding task failed.".into())
+            },
+            AgentType::Ingestor => {
+                // Parse "INGEST_FILE|<doc_id>|<content>"
+                let (doc_id, raw_content) = if description.starts_with("INGEST_FILE|") {
+                    let parts: Vec<&str> = description.splitn(3, '|').collect();
+                    if parts.len() >= 3 {
+                        (parts[1].to_string(), parts[2].to_string())
+                    } else {
+                        ("unknown".to_string(), description.to_string())
+                    }
+                } else {
+                    ("unknown".to_string(), description.to_string())
+                };
+
+                // Chunking logic
+                let chunks: Vec<String> = if raw_content.len() > 3000 {
+                    raw_content.as_bytes()
+                        .chunks(2000)
+                        .map(|c| String::from_utf8_lossy(c).to_string())
+                        .collect()
+                } else {
+                    vec![raw_content.to_string()]
+                };
+
+                let mut total_entities = 0;
+                let mut total_rels = 0;
+
+                if let Some(ref graph) = self.graph_manager {
+                    for (i, chunk) in chunks.iter().enumerate() {
+                        let chunk_id = format!("chunk-{}-{}", doc_id, i);
+                        
+                        // 1. Extract knowledge via LLM
+                        let extraction_prompt = format!(
+                            "You are a Knowledge Graph Ingestor. Analyze this segment from document '{}'.\n\
+                            Extract important entities and their relationships.\n\
+                            Output Format per line:\n\
+                            ENTITY|<id_slug>|<Label>|<name_property>\n\
+                            REL|<from_id_slug>|<to_id_slug>|<TYPE>\n\n\
+                            Chunk Segment:\n{}", 
+                            doc_id, chunk
+                        );
+
+                        if let Ok(response) = call_llm(&extraction_prompt).await {
+                             let mut chunk_entities = Vec::new();
+                             for line in response.lines() {
+                                 let parts: Vec<&str> = line.split('|').collect();
+                                 if parts.len() >= 4 && parts[0].trim() == "ENTITY" {
+                                     let ent = crate::core::graph_manager::Entity {
+                                         id: parts[1].trim().to_string(),
+                                         label: parts[2].trim().to_string(),
+                                         properties: std::collections::HashMap::from([
+                                             ("name".to_string(), parts[3].trim().to_string())
+                                         ])
+                                     };
+                                     chunk_entities.push(ent.id.clone());
+                                     let _ = graph.add_entity(ent).await;
+                                     total_entities += 1;
+                                 } else if parts.len() >= 4 && parts[0].trim() == "REL" {
+                                     let rel = crate::core::graph_manager::Relationship {
+                                         from_id: parts[1].trim().to_string(),
+                                         to_id: parts[2].trim().to_string(),
+                                         rel_type: parts[3].trim().to_string(),
+                                         properties: std::collections::HashMap::new()
+                                     };
+                                     let _ = graph.add_relationship(rel).await;
+                                     total_rels += 1;
+                                 }
+                             }
+
+                             // 3. Create a Chunk node and link everything
+                             let chunk_node = crate::core::graph_manager::Entity {
+                                 id: chunk_id.clone(),
+                                 label: "Chunk".to_string(),
+                                 properties: std::collections::HashMap::from([
+                                     ("doc_source".to_string(), doc_id.clone()),
+                                     ("content_preview".to_string(), chunk.chars().take(200).collect())
+                                 ])
+                             };
+                             let _ = graph.add_entity(chunk_node).await;
+
+                             for ent_id in chunk_entities {
+                                 let _ = graph.add_relationship(crate::core::graph_manager::Relationship {
+                                     from_id: chunk_id.clone(),
+                                     to_id: ent_id,
+                                     rel_type: "EXTRACTED_FROM".to_string(),
+                                     properties: std::collections::HashMap::new()
+                                 }).await;
+                             }
+                        }
+                    }
+                }
+
+                format!("Ingestion Complete for {}. Extracted {} entities and {} correlations across {} graph chunks.", doc_id, total_entities, total_rels, chunks.len())
             },
             _ => {
-                call_llm(description).await.unwrap_or_else(|e| format!("Task failed: {}", e))
+                call_llm(description).await.unwrap_or_else(|e| format!("Generic Agent execution failed: {}", e))
             }
         }
     }

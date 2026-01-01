@@ -33,9 +33,8 @@
 - [x] **Manager Agent Logic**:
     - Ability to break down a high-level goal (e.g., "Build a feature to X") into sub-tasks (Research -> Code -> Review).
     - Recursively submit tasks to the `AgentOrchestrator`.
-- [x] **Inter-Agent Communication**:
-    - Agents sharing context/results via the Knowledge Graph (`agent-result-*` documents).
-- [ ] **Self-Reflection Loop**:
-    - Reviewer Agent critiques output; Manager re-assigns if quality is low.
-
-
+- [x] **Manager Agent Logic**: Task decomposition and monitoring.
+- [x] **Inter-Agent Communication**: Recursive sub-task assignment.
+- [x] **Recursive Tool Usage**: Researcher/Analyst agents now use Search & Graph tools internally for data synthesis.
+- [x] **Agentic Ingestion**: Specialized `Ingestor` agent for chunking and graph-based knowledge extraction.
+- [ ] **Self-Reflection Loop**: Agent outcome validation.ewer Agent critiques output; Manager re-assigns if quality is low.

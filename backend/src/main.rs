@@ -60,6 +60,7 @@ async fn main() -> std::io::Result<()> {
         ("researcher_1", "DeepSearch", AgentType::Researcher),
         ("analyst_1", "PatternFinder", AgentType::Analyst),
         ("coder_1", "DevBot", AgentType::Coder),
+        ("ingestor_1", "KnowledgeExtractor", AgentType::Ingestor),
     ];
 
     for (id, name, atype) in agents {

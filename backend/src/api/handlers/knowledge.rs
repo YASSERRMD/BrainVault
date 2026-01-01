@@ -5,7 +5,6 @@ use crate::core::graph_manager::KnowledgeGraphManager;
 use crate::core::graph_manager::{Entity, Relationship};
 use crate::core::rbac::RBAC;
 use crate::core::audit_manager::AuditManager;
-use crate::db::barq_graph::BarqGraphClient;
 
 #[derive(Serialize, Deserialize)]
 pub struct IngestRequest {
@@ -36,7 +35,7 @@ pub struct ChatResponse {
 async fn call_llm(prompt: &str) -> String {
     let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap_or_default();
     let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_default();
-    let deployment = std::env::var("AZURE_OPENAI_DEPLOYMENT_NAME").unwrap_or_else(|_| "gpt-4o".to_string());
+    let deployment = std::env::var("AZURE_OPENAI_DEPLOYMENT").unwrap_or_else(|_| "gpt-4o".to_string());
     
     if api_key.is_empty() || endpoint.is_empty() {
         return String::from("Azure OpenAI not configured.");
@@ -189,13 +188,13 @@ pub async fn chat_with_knowledge(
 #[get("/api/health")]
 pub async fn health_check(
     engine: web::Data<HybridSearchEngine>,
+    graph: web::Data<KnowledgeGraphManager>,
 ) -> impl Responder {
     // Check vector DB
-    let vector_status = engine.vector_db.get_document_count().await > 0 || true; 
+    let vector_status = engine.check_health().await;
     
     // Check graph DB
-    let graph_client = BarqGraphClient::new();
-    let graph_status = graph_client.health().await.unwrap_or(false);
+    let graph_status = graph.check_health().await;
     
     HttpResponse::Ok().json(serde_json::json!({
         "api": "running",
@@ -210,37 +209,22 @@ pub async fn health_check(
 #[post("/api/knowledge/ingest")]
 pub async fn ingest_knowledge(
     req: web::Json<IngestRequest>,
-    engine: web::Data<HybridSearchEngine>,
-    graph: web::Data<KnowledgeGraphManager>,
+    orchestrator: web::Data<crate::core::agent_orchestrator::AgentOrchestrator>,
 ) -> impl Responder {
-    // 1. Ingest document into vector DB
-    if let Err(e) = engine.ingest_document(&req.doc_id, &req.content).await {
-        return HttpResponse::InternalServerError().body(format!("Vector ingestion failed: {}", e));
-    }
+    // Delegate to Ingestor Agent
+    let task_description = format!(
+        "INGEST_FILE|{}|{}", 
+        req.doc_id, req.content
+    );
     
-    let mut entities = req.entities.clone();
-    let mut relationships = req.relationships.clone();
+    let task_id = orchestrator.submit_task(task_description, Some(crate::core::agent_orchestrator::AgentType::Ingestor)).await;
+    let _ = orchestrator.assign_task(&task_id).await;
 
-    // 2. Auto-Extract if empty
-    if entities.is_empty() {
-        println!("INFO: Auto-extracting entities for doc {}", req.doc_id);
-        let (extracted_ents, extracted_rels) = extract_graph_data(&req.content).await;
-        entities = extracted_ents;
-        relationships = extracted_rels;
-        println!("INFO: Extracted {} entities, {} rels", entities.len(), relationships.len());
-    }
-    
-    // 3. Create entity nodes in graph
-    for entity in entities {
-         let _ = graph.add_entity(entity).await;
-    }
-    
-    // 4. Create relationships in graph
-    for rel in relationships {
-         let _ = graph.add_relationship(rel).await;
-    }
-    
-    HttpResponse::Ok().json(serde_json::json!({"status": "ingested", "doc_id": req.doc_id}))
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "processing", 
+        "task_id": task_id,
+        "message": "Ingestion task submitted to agent swarm."
+    }))
 }
 
 #[post("/api/knowledge/seed")]

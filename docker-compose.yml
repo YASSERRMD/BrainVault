@@ -1,13 +1,37 @@
 services:
+  barq-vector:
+    image: barq-db:latest
+    ports:
+      - "50051:50051"
+      - "9200:8080"
+    volumes:
+      - barq-vector-data:/data
+    restart: unless-stopped
+
+  barq-graph:
+    image: barq-graphdb:latest
+    ports:
+      - "7687:8080"
+      - "7688:50051"
+    volumes:
+      - barq-graph-data:/data
+    restart: unless-stopped
+
   brainvault-api:
     build: ./backend
     ports:
       - "8080:8080"
+    depends_on:
+      - barq-vector
+      - barq-graph
     env_file:
       - .env
+    volumes:
+      - brainvault-api-data:/data
     environment:
-      - VECTOR_DB_URL=http://localhost:9999 # Dummy URL to force local fallback
-      - GRAPH_DB_URL=http://localhost:9999
+      - VECTOR_DB_URL=http://barq-vector:8080
+      - GRAPH_DB_URL=http://barq-graph:8080
+      - DATA_PATH=/data
       - RUST_LOG=info
     restart: unless-stopped
 
@@ -20,3 +44,8 @@ services:
     depends_on:
       - brainvault-api
     restart: unless-stopped
+
+volumes:
+  barq-vector-data:
+  barq-graph-data:
+  brainvault-api-data:
