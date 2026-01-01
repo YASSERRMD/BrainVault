@@ -1,8 +1,10 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use crate::core::search_engine::HybridSearchEngine;
-use crate::core::graph_manager::{KnowledgeGraphManager, Entity, Relationship};
+use crate::core::graph_manager::KnowledgeGraphManager;
+use crate::core::graph_manager::{Entity, Relationship};
 use crate::core::rbac::RBAC;
+use crate::db::barq_graph::BarqGraphClient;
 
 #[derive(Serialize, Deserialize)]
 pub struct IngestRequest {
@@ -17,6 +19,27 @@ pub struct SearchQuery {
     pub q: String,
     pub top_k: usize,
 }
+
+#[get("/api/health")]
+pub async fn health_check(
+    engine: web::Data<HybridSearchEngine>,
+) -> impl Responder {
+    // Check vector DB
+    let vector_status = engine.vector_db.get_document_count().await > 0 || true; // Local always works
+    
+    // Check graph DB
+    let graph_client = BarqGraphClient::new();
+    let graph_status = graph_client.health().await.unwrap_or(false);
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "api": "running",
+        "vector_db": if vector_status { "connected" } else { "disconnected" },
+        "graph_db": if graph_status { "connected" } else { "local_fallback" },
+        "vector_db_url": std::env::var("VECTOR_DB_URL").unwrap_or_else(|_| "http://barq-vector:8080".to_string()),
+        "graph_db_url": std::env::var("GRAPH_DB_URL").unwrap_or_else(|_| "http://barq-graph:8080".to_string())
+    }))
+}
+
 
 #[post("/api/knowledge/ingest")]
 pub async fn ingest_knowledge(

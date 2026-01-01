@@ -83,6 +83,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(graph_data.clone())
             .app_data(rbac_data.clone())
             .app_data(orch_data.clone())
+            .service(knowledge::health_check)
             .service(knowledge::ingest_knowledge)
             .service(knowledge::hybrid_search)
             .service(knowledge::get_context)
