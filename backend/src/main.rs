@@ -89,6 +89,7 @@ async fn main() -> std::io::Result<()> {
             .service(knowledge::get_context)
             .service(knowledge::seed_test_data)
             .service(knowledge::get_knowledge_stats)
+            .service(knowledge::get_graph_data)
             .service(knowledge::get_document)
             .service(knowledge::list_all_documents)
             .service(agents::submit_task)

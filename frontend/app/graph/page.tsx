@@ -1,15 +1,31 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Network, RefreshCw, Plus, Loader2, FileText, Database } from "lucide-react";
+import { Network, RefreshCw, Plus, Loader2, FileText, Database, Share2 } from "lucide-react";
 import { api, KnowledgeStats } from "@/lib/api";
 import useSWR from "swr";
 import Link from "next/link";
 
+interface Entity {
+    id: string;
+    label: string;
+    properties: Record<string, string>;
+}
+
+interface Relationship {
+    from_id: string;
+    to_id: string;
+    rel_type: string;
+}
+
+interface GraphData {
+    entities: Entity[];
+    relationships: Relationship[];
+}
+
 interface DocumentItem {
     doc_id: string;
     content: string | null;
-    score: number;
 }
 
 interface DocumentsResponse {
@@ -18,16 +34,13 @@ interface DocumentsResponse {
 }
 
 const statsFetcher = (url: string) => api.get<KnowledgeStats>(url).then((res) => res.data);
+const graphFetcher = (url: string) => api.get<GraphData>(url).then((res) => res.data);
 const docsFetcher = (url: string) => api.get<DocumentsResponse>(url).then((res) => res.data);
 
 export default function GraphPage() {
-    const { data: stats, mutate: mutateStats } = useSWR("/knowledge/stats", statsFetcher, {
-        refreshInterval: 5000,
-    });
-
-    const { data: docsData, mutate: mutateDocs, isLoading } = useSWR("/documents", docsFetcher, {
-        refreshInterval: 10000,
-    });
+    const { data: stats, mutate: mutateStats } = useSWR("/knowledge/stats", statsFetcher, { refreshInterval: 5000 });
+    const { data: graphData, mutate: mutateGraph, isLoading: isGraphLoading } = useSWR("/graph/data", graphFetcher, { refreshInterval: 5000 });
+    const { data: docsData, mutate: mutateDocs } = useSWR("/documents", docsFetcher, { refreshInterval: 10000 });
 
     const [loading, setLoading] = useState(false);
 
@@ -36,6 +49,7 @@ export default function GraphPage() {
         try {
             await api.post("/knowledge/seed");
             mutateStats();
+            mutateGraph();
             mutateDocs();
         } catch (err) {
             console.error("Seed failed", err);
@@ -46,56 +60,61 @@ export default function GraphPage() {
 
     const handleRefresh = () => {
         mutateStats();
+        mutateGraph();
         mutateDocs();
     };
 
     const documents = docsData?.documents || [];
+    const entities = graphData?.entities || [];
+    const relationships = graphData?.relationships || [];
 
-    // Generate graph nodes from documents
-    const graphNodes = useMemo(() => {
-        return documents.slice(0, 12).map((doc, i) => {
-            const angle = (i / Math.min(documents.length, 12)) * 2 * Math.PI - Math.PI / 2;
-            const radius = 140;
-            const centerX = 300;
-            const centerY = 200;
+    // Simple layout algorithm
+    const visualNodes = useMemo(() => {
+        if (!entities.length) return [];
+
+        // Simple circular layout
+        return entities.map((entity, i) => {
+            const angle = (i / entities.length) * 2 * Math.PI;
+            const radius = 150;
+            const cx = 300;
+            const cy = 200;
             return {
-                id: doc.doc_id,
-                label: doc.doc_id.replace("doc-00", "D").replace("doc-0", "D").replace("agent-result-", "A-"),
-                isAgent: doc.doc_id.startsWith("agent-result-"),
-                x: centerX + radius * Math.cos(angle),
-                y: centerY + radius * Math.sin(angle),
-                content: doc.content?.slice(0, 80) || ""
+                ...entity,
+                x: cx + radius * Math.cos(angle),
+                y: cy + radius * Math.sin(angle),
+                color: i % 2 === 0 ? "text-blue-500" : "text-purple-500",
+                fill: i % 2 === 0 ? "fill-blue-500/20" : "fill-purple-500/20",
+                stroke: i % 2 === 0 ? "stroke-blue-500" : "stroke-purple-500",
             };
         });
-    }, [documents]);
+    }, [entities]);
+
+    const visualEdges = useMemo(() => {
+        return relationships.map(rel => {
+            const source = visualNodes.find(n => n.id === rel.from_id);
+            const target = visualNodes.find(n => n.id === rel.to_id);
+            return { ...rel, source, target };
+        }).filter(e => e.source && e.target);
+    }, [relationships, visualNodes]);
 
     return (
         <div className="max-w-6xl mx-auto space-y-8">
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                        <Network className="w-8 h-8 text-primary" />
+                        <Share2 className="w-8 h-8 text-primary" />
                         Knowledge Graph
                     </h1>
                     <p className="text-muted-foreground mt-1">
-                        Visualize documents and entities in the knowledge base.
+                        Visualize entity relationships and structure.
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <button
-                        onClick={handleRefresh}
-                        className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium"
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                        Refresh
+                    <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium">
+                        <RefreshCw className="w-4 h-4" /> Refresh
                     </button>
-                    <button
-                        onClick={handleSeedData}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
-                    >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Seed Data
+                    <button onClick={handleSeedData} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Seed Data
                     </button>
                 </div>
             </div>
@@ -122,10 +141,7 @@ export default function GraphPage() {
                 </div>
                 <div className="p-6 rounded-xl bg-card border border-border">
                     <div className="flex items-center gap-3">
-                        <svg className="w-8 h-8 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="6" y1="12" x2="18" y2="12" />
-                            <polyline points="12 6 18 12 12 18" />
-                        </svg>
+                        <Share2 className="w-8 h-8 text-green-500" />
                         <div>
                             <div className="text-3xl font-bold text-green-500">{stats?.relationships || 0}</div>
                             <div className="text-sm text-muted-foreground">Relationships</div>
@@ -136,106 +152,80 @@ export default function GraphPage() {
 
             {/* Graph Visualization */}
             <div className="p-6 rounded-xl bg-card border border-border">
-                <h3 className="text-lg font-semibold mb-4">Document Network</h3>
-                {isLoading ? (
-                    <div className="h-[400px] flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    </div>
-                ) : graphNodes.length === 0 ? (
+                <h3 className="text-lg font-semibold mb-4">Entity Relationships</h3>
+                {isGraphLoading ? (
+                    <div className="h-[400px] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+                ) : visualNodes.length === 0 ? (
                     <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground">
-                        <Database className="w-16 h-16 mb-4 opacity-30" />
-                        <p className="text-lg font-medium">No documents in knowledge base</p>
-                        <p className="text-sm mt-1">Click "Seed Data" to add sample documents</p>
+                        <Network className="w-16 h-16 mb-4 opacity-30" />
+                        <p className="text-lg font-medium">No entities in graph</p>
+                        <p className="text-sm mt-1">Click "Seed Data" to create entities</p>
                     </div>
                 ) : (
                     <div className="relative h-[400px] bg-gradient-to-br from-secondary/20 to-background rounded-lg border border-border/50">
                         <svg className="w-full h-full" viewBox="0 0 600 400">
-                            {/* Center hub */}
-                            <circle cx="300" cy="200" r="40" className="fill-primary/10 stroke-primary/30" strokeWidth="2" />
-                            <text x="300" y="195" textAnchor="middle" fontSize="10" fill="currentColor" opacity="0.5">Knowledge</text>
-                            <text x="300" y="210" textAnchor="middle" fontSize="10" fill="currentColor" opacity="0.5">Base</text>
+                            <defs>
+                                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" opacity="0.5" />
+                                </marker>
+                            </defs>
 
-                            {/* Edges from center to nodes */}
-                            {graphNodes.map((node, i) => (
-                                <line
-                                    key={`edge-${i}`}
-                                    x1="300"
-                                    y1="200"
-                                    x2={node.x}
-                                    y2={node.y}
-                                    stroke="currentColor"
-                                    strokeOpacity={0.1}
-                                    strokeWidth={1}
-                                />
+                            {/* Edges */}
+                            {visualEdges.map((edge, i) => (
+                                <g key={i}>
+                                    <line
+                                        x1={edge.source?.x}
+                                        y1={edge.source?.y}
+                                        x2={edge.target?.x}
+                                        y2={edge.target?.y}
+                                        stroke="#64748b"
+                                        strokeOpacity={0.4}
+                                        strokeWidth={1.5}
+                                        markerEnd="url(#arrowhead)"
+                                    />
+                                    <text
+                                        x={((edge.source?.x || 0) + (edge.target?.x || 0)) / 2}
+                                        y={((edge.source?.y || 0) + (edge.target?.y || 0)) / 2 - 5}
+                                        textAnchor="middle"
+                                        fontSize="10"
+                                        fill="currentColor"
+                                        opacity="0.6"
+                                        className="bg-card px-1"
+                                    >
+                                        {edge.rel_type}
+                                    </text>
+                                </g>
                             ))}
 
                             {/* Nodes */}
-                            {graphNodes.map((node) => (
-                                <g key={node.id} className="cursor-pointer">
-                                    <circle
-                                        cx={node.x}
-                                        cy={node.y}
-                                        r={28}
-                                        className={node.isAgent
-                                            ? "fill-purple-500/20 stroke-purple-500 hover:fill-purple-500/30"
-                                            : "fill-blue-500/20 stroke-blue-500 hover:fill-blue-500/30"
-                                        }
-                                        strokeWidth={2}
-                                    />
-                                    <text
-                                        x={node.x}
-                                        y={node.y + 4}
-                                        textAnchor="middle"
-                                        fontSize="11"
-                                        fill="currentColor"
-                                        className="font-medium pointer-events-none"
-                                    >
-                                        {node.label}
+                            {visualNodes.map((node) => (
+                                <g key={node.id} className="cursor-pointer transition-opacity hover:opacity-80">
+                                    <circle cx={node.x} cy={node.y} r={25} className={`${node.fill} ${node.stroke} transition-all`} strokeWidth={2} />
+                                    <text x={node.x} y={node.y + 4} textAnchor="middle" fontSize="11" fill="currentColor" className="font-medium pointer-events-none">
+                                        {node.label.length > 8 ? node.label.slice(0, 8) + ".." : node.label}
                                     </text>
+                                    <title>{node.label}</title>
                                 </g>
                             ))}
                         </svg>
 
-                        {/* Legend */}
-                        <div className="absolute bottom-4 left-4 flex gap-4 text-xs bg-card/80 backdrop-blur-sm px-3 py-2 rounded-lg">
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-full bg-blue-500/50 border border-blue-500" />
-                                <span className="text-muted-foreground">Document</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-full bg-purple-500/50 border border-purple-500" />
-                                <span className="text-muted-foreground">Agent Result</span>
-                            </div>
-                        </div>
-
                         <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">
-                            {graphNodes.length} nodes
+                            {visualNodes.length} entities • {visualEdges.length} edges
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Document List */}
+            {/* Document List (Simplified) */}
             {documents.length > 0 && (
                 <div className="p-6 rounded-xl bg-card border border-border">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
-                        All Documents ({documents.length})
-                    </h3>
-                    <div className="grid gap-2">
-                        {documents.map((doc) => (
-                            <Link
-                                key={doc.doc_id}
-                                href={`/documents/${encodeURIComponent(doc.doc_id)}`}
-                                className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary flex items-center justify-between transition-colors"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-2 h-2 rounded-full ${doc.doc_id.startsWith("agent-result-") ? "bg-purple-500" : "bg-blue-500"}`} />
-                                    <span className="font-mono text-sm">{doc.doc_id}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground max-w-md truncate">
-                                    {doc.content?.slice(0, 60)}...
-                                </span>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><FileText className="w-5 h-5" /> Referenced Documents</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {documents.slice(0, 6).map((doc) => (
+                            <Link key={doc.doc_id} href={`/documents/${encodeURIComponent(doc.doc_id)}`} className="p-3 rounded-lg bg-secondary/30 hover:bg-secondary flex items-center gap-3 transition-colors border border-transparent hover:border-border">
+                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                <span className="font-mono text-xs">{doc.doc_id}</span>
+                                <span className="text-xs text-muted-foreground truncate flex-1">{doc.content?.slice(0, 40)}...</span>
                             </Link>
                         ))}
                     </div>

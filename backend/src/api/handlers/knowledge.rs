@@ -155,6 +155,15 @@ pub async fn list_all_documents(
         "documents": documents,
         "count": documents.len()
     }))
+    }))
+}
+
+#[get("/api/graph/data")]
+pub async fn get_graph_data(
+    graph: web::Data<KnowledgeGraphManager>,
+) -> impl Responder {
+    let data = graph.get_graph_data().await;
+    HttpResponse::Ok().json(data)
 }
 
 #[post("/api/search")]

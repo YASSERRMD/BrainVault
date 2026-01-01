@@ -117,4 +117,14 @@ impl KnowledgeGraphManager {
         let relationships = self.relationships.read().await;
         (entities.len(), relationships.len())
     }
+
+    pub async fn get_graph_data(&self) -> ContextGraph {
+        let entities = self.entities.read().await;
+        let relationships = self.relationships.read().await;
+        
+        ContextGraph {
+            entities: entities.values().cloned().collect(),
+            relationships: relationships.clone(),
+        }
+    }
 }
