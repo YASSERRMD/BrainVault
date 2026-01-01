@@ -91,9 +91,10 @@ export default function AgentsPage() {
                                     onChange={(e) => setAgentType(e.target.value)}
                                     id="agent_type"
                                 >
+                                    <option value="Manager">Manager (Swarm Leader)</option>
                                     <option value="Researcher">Researcher</option>
                                     <option value="Analyst">Analyst</option>
-                                    <option value="Coder">Coder (General)</option>
+                                    <option value="Coder">Coder</option>
                                 </select>
                             </div>
                             <div>

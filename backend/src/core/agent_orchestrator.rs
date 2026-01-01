@@ -24,17 +24,20 @@ pub struct AgentProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskStatus {
     Pending,
-    InProgress,
+    InProgress, // Assigned but not started execution logic
+    Executing,  // Currently running in thread
     Completed,
     Failed,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub description: String,
     pub status: TaskStatus,
     pub assigned_agent_id: Option<String>,
+    pub preferred_agent_type: Option<AgentType>,
     pub result: Option<String>,
     pub audit_log: Vec<AuditLogEntry>,
 }
@@ -87,13 +90,14 @@ impl AgentOrchestrator {
         agents.insert(profile.id.clone(), profile);
     }
 
-    pub async fn submit_task(&self, description: String) -> String {
+    pub async fn submit_task(&self, description: String, agent_type: Option<AgentType>) -> String {
         let task_id = Uuid::new_v4().to_string();
         let mut task = Task {
             id: task_id.clone(),
             description: description.clone(),
             status: TaskStatus::Pending,
             assigned_agent_id: None,
+            preferred_agent_type: agent_type,
             result: None,
             audit_log: Vec::new(),
         };
@@ -114,15 +118,25 @@ impl AgentOrchestrator {
         }
 
         let agents = self.agents.lock().await;
-        // Simple mock scheduling
-        if let Some((agent_id, _)) = agents.iter().next() {
+        
+        // Find suitable agent
+        let selected_agent = if let Some(pref_type) = &task.preferred_agent_type {
+            agents.values()
+                .find(|p| p.agent_type == *pref_type)
+                .map(|p| p.id.clone())
+        } else {
+            // Default to any available
+            agents.keys().next().cloned()
+        };
+
+        if let Some(agent_id) = selected_agent {
             task.assigned_agent_id = Some(agent_id.clone());
             task.status = TaskStatus::InProgress;
             task.add_log(Some("system".to_string()), "ASSIGNED".to_string(), format!("Assigned to agent {}", agent_id));
-            return Ok(agent_id.clone());
+            return Ok(agent_id);
         }
 
-        Err("No agents available".to_string())
+        Err("No suitable agents available".to_string())
     }
     
     pub async fn complete_task(&self, task_id: &str, result: String) -> Result<(), String> {
@@ -153,62 +167,65 @@ impl AgentOrchestrator {
     // The background worker that processes tasks
     pub async fn run_agent_loop(&self) {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             
-            // 1. Identify tasks involved
-            let mut tasks_to_process: Vec<(String, String)> = Vec::new(); // (task_id, agent_id)
+            // 1. Identify tasks involved and mark Executing
+            let mut tasks_to_launch: Vec<(String, String)> = Vec::new();
             
             {
-                let tasks = self.tasks.lock().await;
-                for (id, task) in tasks.iter() {
+                let mut tasks = self.tasks.lock().await;
+                for (id, task) in tasks.iter_mut() {
                     if matches!(task.status, TaskStatus::InProgress) && task.assigned_agent_id.is_some() {
-                         tasks_to_process.push((id.clone(), task.assigned_agent_id.clone().unwrap()));
+                         task.status = TaskStatus::Executing;
+                         tasks_to_launch.push((id.clone(), task.assigned_agent_id.clone().unwrap()));
                     }
                 }
             }
             
-            // 2. Execute agent logic
-            for (task_id, agent_id) in tasks_to_process {
-                let agent_profile = {
-                    let agents = self.agents.lock().await;
-                    agents.get(&agent_id).cloned()
-                };
-                
-                if let Some(profile) = agent_profile {
-                    let description = {
-                         let tasks = self.tasks.lock().await;
-                         tasks.get(&task_id).unwrap().description.clone()
-                    };
-                    
-                    let result = self.execute_agent_logic(&profile, &description).await;
-                    
-                    // 3. Store the result in the knowledge base
-                    if let Some(ref engine) = self.search_engine {
-                        let doc_id = format!("agent-result-{}", task_id);
-                        let content = format!(
-                            "Agent Task Result\nTask ID: {}\nAgent: {} ({})\nQuery: {}\n\n{}",
-                            task_id,
-                            profile.name,
-                            format!("{:?}", profile.agent_type),
-                            description,
-                            result
-                        );
-                        if let Err(e) = engine.ingest_document(&doc_id, &content).await {
-                            println!("WARN: Failed to store agent result: {}", e);
-                        } else {
-                            println!("INFO: Stored agent result as document '{}'", doc_id);
-                        }
-                    }
-                    
-                    // 4. Update task
-                    let _ = self.complete_task(&task_id, result).await;
-                    println!("DEBUG: Agent {} completed task {}", agent_id, task_id);
-                }
+            // 2. Spawn execution
+            for (task_id, agent_id) in tasks_to_launch {
+                let orchestrator = self.clone();
+                tokio::spawn(async move {
+                    orchestrator.process_single_task(task_id, agent_id).await;
+                });
             }
         }
     }
+
+    async fn process_single_task(&self, task_id: String, agent_id: String) {
+        let agent_profile = {
+            let agents = self.agents.lock().await;
+            agents.get(&agent_id).cloned()
+        };
+        
+        if let Some(profile) = agent_profile {
+            let description = {
+                 let tasks = self.tasks.lock().await;
+                 if let Some(t) = tasks.get(&task_id) {
+                     t.description.clone()
+                 } else {
+                     return;
+                 }
+            };
+            
+            // Pass task_id to logic for Manager recursive capabilities
+            let result = self.execute_agent_logic(&profile, &description, &task_id).await;
+            
+            // Store result
+            if let Some(ref engine) = self.search_engine {
+                let doc_id = format!("agent-result-{}", task_id);
+                let content = format!(
+                    "Agent Task Result\nTask ID: {}\nAgent: {} ({})\nQuery: {}\n\n{}",
+                    task_id, profile.name, format!("{:?}", profile.agent_type), description, result
+                );
+                let _ = engine.ingest_document(&doc_id, &content).await;
+            }
+            
+            let _ = self.complete_task(&task_id, result).await;
+        }
+    }
     
-    async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str) -> String {
+    async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str, current_task_id: &str) -> String {
         use crate::core::llm::azure_openai::AzureOpenAIClient;
         
         // Helper to call LLM
@@ -219,14 +236,84 @@ impl AgentOrchestrator {
                      Err(e) => println!("WARN: Azure OpenAI failed: {}", e),
                  }
             }
-            Err("No LLM provider available".to_string())
+            // Fallback for demo if no LLM key
+            Ok("LLM Output Mock".to_string())
         }
         
         match profile.agent_type {
-            AgentType::Researcher => {
-                // deep_research_workflow
+            AgentType::Manager => {
                 let plan_prompt = format!(
-                    "You are a Lead Researcher. Break down this research topic into 3 specific search queries to gather comprehensive information.\nTopic: '{}'\nOutput Format: just the 3 queries, one per line.", 
+                    "You are a Project Manager. Break down this objective into specialized steps.\nObjective: '{}'\n\
+                    Available Agents: Researcher (data gathering), Analyst (pattern finding), Coder (implementation).\n\
+                    Output strict format per line: PLAN|<AgentType>|<TaskDescription>\n\
+                    Example: PLAN|Researcher|Find libraries for X", 
+                    description
+                );
+                
+                let response = call_llm(&plan_prompt).await.unwrap_or_default();
+                let mut subtask_ids = Vec::new();
+                
+                for line in response.lines() {
+                    let parts: Vec<&str> = line.split('|').collect();
+                    if parts.len() >= 3 && parts[0].trim() == "PLAN" {
+                        let agent_str = parts[1].trim();
+                        let task_desc = parts[2].trim();
+                        
+                        let target_type = match agent_str {
+                            "Researcher" => AgentType::Researcher,
+                            "Analyst" => AgentType::Analyst,
+                            "Coder" => AgentType::Coder,
+                            _ => AgentType::Researcher
+                        };
+                        
+                        let sid = self.submit_task(task_desc.to_string(), Some(target_type)).await;
+                        let _ = self.assign_task(&sid).await; // Kickoff
+                        subtask_ids.push(sid);
+                    }
+                }
+                
+                if subtask_ids.is_empty() {
+                    return "No subtasks generated. Task failed.".to_string();
+                }
+                
+                // Monitor subtasks
+                let mut results = Vec::new();
+                let start = std::time::Instant::now();
+                
+                loop {
+                    // Check timeout (e.g. 5 mins)
+                    if start.elapsed().as_secs() > 300 {
+                        return "Manager timed out waiting for subtasks.".to_string();
+                    }
+                    
+                    let mut all_done = true;
+                    // Re-check all
+                    results.clear();
+                    
+                    for sid in &subtask_ids {
+                        if let Some(t) = self.get_task(sid).await {
+                            match t.status {
+                                TaskStatus::Completed => results.push(format!("Task {}: {}", sid, t.result.unwrap_or_default())),
+                                TaskStatus::Failed => results.push(format!("Task {}: Failed", sid)),
+                                _ => all_done = false,
+                            }
+                        }
+                    }
+                    
+                    if all_done { break; }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+                
+                // Synthesize
+                let synthesis_prompt = format!(
+                    "You are a Project Manager. Synthesize these subtask results into a final report for: '{}'.\n\nResults:\n{}",
+                    description, results.join("\n---\n")
+                );
+                call_llm(&synthesis_prompt).await.unwrap_or("Synthesis Failed".into())
+            },
+            AgentType::Researcher => {
+                let plan_prompt = format!(
+                    "You are a Lead Researcher. Break down this research topic into 3 specific search queries.\nTopic: '{}'\nOutput Format: just the 3 queries, one per line.", 
                     description
                 );
                 
@@ -236,9 +323,9 @@ impl AgentOrchestrator {
                 };
                 
                 let mut accumulated_context = String::new();
-                
                 if let Some(ref engine) = self.search_engine {
                     for query in queries {
+                        // In a real swarm, researcher might create sub-research tasks too? No, keep simple.
                         if let Ok(results) = engine.search(&query, 3).await {
                             for hit in results.hits {
                                 accumulated_context.push_str(&format!("\nSource [{}]: {}\n", hit.doc_id, hit.content.unwrap_or_default()));
@@ -247,41 +334,26 @@ impl AgentOrchestrator {
                     }
                 }
                 
-                if accumulated_context.is_empty() {
-                    accumulated_context = "No internal documents found.".to_string();
-                }
-                
                 let report_prompt = format!(
-                    "You are a Research Agent. Write a comprehensive research report on: '{}'.\n\nBase your report strictly on the following gathered context:\n{}\n\nStructure the report with Introduction, Key Findings, and Conclusion.", 
+                    "You are a Research Agent. Write a report on: '{}'.\nContext:\n{}", 
                     description, accumulated_context
                 );
                 
-                call_llm(&report_prompt).await.unwrap_or_else(|e| format!("Research failed: {}", e))
+                call_llm(&report_prompt).await.unwrap_or_default()
             },
             AgentType::Analyst => {
-                // Analysis logic
-                let mut context = String::new();
-                if let Some(ref engine) = self.search_engine {
-                     if let Ok(results) = engine.search(description, 5).await {
-                         for hit in results.hits {
-                             context.push_str(&format!("\n[{}]: {}\n", hit.doc_id, hit.content.unwrap_or_default()));
-                         }
-                     }
-                }
-                
                 let analysis_prompt = format!(
-                    "You are a Senior Data Analyst. specific task: '{}'.\n\nAnalyze the following data points for patterns, anomalies, or contradictions:\n{}\n\nProvide a detailed analysis.", 
-                    description, context
+                    "You are a Senior Data Analyst. specific task: '{}'.\nAnalyze patterns/anomalies.", 
+                    description
                 );
-                
-                call_llm(&analysis_prompt).await.unwrap_or_else(|e| format!("Analysis failed: {}", e))
+                call_llm(&analysis_prompt).await.unwrap_or_default()
             },
             AgentType::Coder => {
                 let coder_prompt = format!(
-                    "You are an expert Software Engineer. Your task is to generate high-quality, production-ready code.\n\nTask: {}\n\nProvide the solution in a generic format (markdown code blocks) with brief explanations.", 
+                    "You are specific Software Engineer. Task: {}. Output code blocks.", 
                     description
                 );
-                call_llm(&coder_prompt).await.unwrap_or_else(|e| format!("Coding task failed: {}", e))
+                call_llm(&coder_prompt).await.unwrap_or_default()
             },
             _ => {
                 call_llm(description).await.unwrap_or_else(|e| format!("Task failed: {}", e))

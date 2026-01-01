@@ -22,7 +22,7 @@ pub async fn submit_task(
     orchestrator: web::Data<AgentOrchestrator>,
 ) -> impl Responder {
     let type_enum = req.task_type.clone().unwrap_or(AgentType::Researcher); // Default to Researcher
-    let task_id = orchestrator.submit_task(req.description.clone(), type_enum).await;
+    let task_id = orchestrator.submit_task(req.description.clone(), Some(type_enum)).await;
     
     // Auto-assign for now (Phase 2 requirement says "trigger tasks", not necessarily manual assign)
     // In a real flow, this might happen asynchronously.

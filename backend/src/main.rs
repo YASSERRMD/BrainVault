@@ -54,12 +54,22 @@ async fn main() -> std::io::Result<()> {
     let orchestrator = AgentOrchestrator::new(Some(search_arc.clone()), Some(graph_arc.clone()));
     
     // Register a default agent
-    orchestrator.register_agent(AgentProfile {
-        id: "default_agent".to_string(),
-        name: "Default Agent".to_string(),
-        agent_type: AgentType::Manager,
-        capabilities: vec!["general".to_string()],
-    }).await;
+    // Register Agent Swarm
+    let agents = vec![
+        ("manager_1", "Overseer", AgentType::Manager),
+        ("researcher_1", "DeepSearch", AgentType::Researcher),
+        ("analyst_1", "PatternFinder", AgentType::Analyst),
+        ("coder_1", "DevBot", AgentType::Coder),
+    ];
+
+    for (id, name, atype) in agents {
+        orchestrator.register_agent(AgentProfile {
+            id: id.to_string(),
+            name: name.to_string(),
+            agent_type: atype,
+            capabilities: vec!["general".to_string()],
+        }).await;
+    }
     
     // Spawn Agent Loop
     let orch_for_loop = orchestrator.clone();
