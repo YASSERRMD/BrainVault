@@ -58,7 +58,7 @@ export function Sidebar() {
     };
 
     return (
-        <div className="w-64 border-r border-border h-screen p-4 flex flex-col bg-card/50 glass-panel">
+        <div className="w-64 border-r border-border h-screen p-4 flex flex-col bg-card/30 glass-panel backdrop-blur-xl">
             <div className="flex items-center gap-3 px-2 mb-8">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
                     <Cpu className="text-white w-5 h-5" />
@@ -116,13 +116,13 @@ export function Sidebar() {
                     </button>
                 </div>
 
-                <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700">
-                    <p className="text-xs text-muted-foreground mb-2">System Status</p>
+                <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">System Status</p>
                     <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-sm font-semibold text-white">Online</span>
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+                        <span className="text-sm font-semibold text-foreground">Online</span>
                     </div>
-                    <p className="text-[10px] text-slate-500">v1.2.0 • NAFS-4 Active</p>
+                    <p className="text-[10px] text-muted-foreground/60">v1.2.0 • NAFS-4 Active</p>
                 </div>
             </div>
         </div>
