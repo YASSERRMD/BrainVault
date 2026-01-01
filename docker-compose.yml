@@ -1,33 +1,15 @@
 services:
-  barq-vector:
-    image: barq-db:latest
-    ports:
-      - "50051:50051" # gRPC
-      - "9200:8080" # REST API
-    environment:
-      - VECTOR_DB_MEMORY_MB=1024
-
-  barq-graph:
-    image: barq-graphdb:latest
-    ports:
-      - "7687:8080" # Graph REST API (container runs on 8080)
-      - "7688:50051" # Graph gRPC
-    environment:
-      - GRAPH_DB_MEMORY_MB=512
-
   brainvault-api:
     build: ./backend
     ports:
       - "8080:8080"
-    depends_on:
-      - barq-vector
-      - barq-graph
     env_file:
       - .env
     environment:
-      - VECTOR_DB_URL=http://barq-vector:8080
-      - VECTOR_DB_GRPC_URL=http://barq-vector:50051
-      - GRAPH_DB_URL=http://barq-graph:8080
+      - VECTOR_DB_URL=http://localhost:9999 # Dummy URL to force local fallback
+      - GRAPH_DB_URL=http://localhost:9999
+      - RUST_LOG=info
+    restart: unless-stopped
 
   brainvault-frontend:
     build: ./frontend
@@ -37,3 +19,4 @@ services:
       - NODE_ENV=production
     depends_on:
       - brainvault-api
+    restart: unless-stopped
