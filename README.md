@@ -1,68 +1,74 @@
-# 🧠 BrainVault
+# BrainVault
 
 **An Agentic Knowledge Management System with Neural Graph Intelligence**
 
 BrainVault is a next-generation knowledge base that combines **vector search**, **knowledge graphs**, and **autonomous AI agents** to transform raw documents into interconnected, queryable intelligence.
 
-![BrainVault Architecture](https://img.shields.io/badge/Architecture-Rust%20%2B%20Next.js-blue) ![Docker](https://img.shields.io/badge/Docker-Ready-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
+<p align="center">
+  <img src="assets/logo.svg" alt="BrainVault Logo" width="200" height="200">
+</p>
+
+![Architecture](https://img.shields.io/badge/Architecture-Rust%20%2B%20Next.js-blue)
+![Docker](https://img.shields.io/badge/Docker-Ready-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
 
-## ✨ Features
+## Features
 
-### 🤖 Agentic Knowledge Processing
+### Agentic Knowledge Processing
 - **Autonomous Ingestion**: Upload files and let the AI agent swarm handle chunking, entity extraction, and graph linking
 - **Multi-Agent Orchestration**: Manager, Researcher, Analyst, Coder, and Ingestor agents work concurrently
 - **Real-time Task Tracking**: Monitor agent tasks and their completion status
 
-### 🔍 Hybrid Search
+### Hybrid Search
 - **Vector Similarity**: Semantic search using embeddings
 - **BM25 Ranking**: Traditional keyword-based retrieval
 - **Weighted Fusion**: Configurable blend of vector and lexical search
 
-### 🕸️ Knowledge Graph
+### Knowledge Graph
 - **Auto-extracted Entities**: LLM-powered entity and relationship extraction
 - **Visual Graph Explorer**: Interactive node-based visualization with drag support
 - **Semantic Linking**: Documents automatically linked to extracted concepts
 
-### 🔐 Enterprise Security
+### Enterprise Security
 - **RBAC**: Role-based access control (Admin, Editor, Viewer)
 - **Audit Logging**: Complete trail of all agent actions and user queries
 - **Secure by Default**: API-key protected endpoints
 
-### 🎨 Premium UI
+### Premium UI
 - **Modern Dashboard**: Real-time system metrics and agent activity
 - **Dark/Light Themes**: Automatic theme detection with manual override
 - **Responsive Design**: Works on desktop and mobile
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        BrainVault                               │
-├─────────────────────────────────────────────────────────────────┤
-│  Frontend (Next.js 14)                                          │
-│  ├── Dashboard, Chat, Search, Graph Visualization               │
-│  ├── File Upload with Drag & Drop                               │
-│  └── Multi-Provider Settings (LLM + Embeddings)                 │
-├─────────────────────────────────────────────────────────────────┤
-│  Backend (Rust + Actix-Web)                                     │
-│  ├── Agent Orchestrator (Manager, Researcher, Analyst, etc.)    │
-│  ├── Hybrid Search Engine (Vector + BM25)                       │
-│  ├── Knowledge Graph Manager                                    │
-│  └── RBAC + Audit System                                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Data Layer                                                     │
-│  ├── Barq VectorDB (Embeddings & Similarity Search)             │
-│  └── Barq GraphDB (Entities & Relationships)                    │
-└─────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------+
+|                        BrainVault                               |
++-----------------------------------------------------------------+
+|  Frontend (Next.js 14)                                          |
+|  - Dashboard, Chat, Search, Graph Visualization                 |
+|  - File Upload with Drag & Drop                                 |
+|  - Multi-Provider Settings (LLM + Embeddings)                   |
++-----------------------------------------------------------------+
+|  Backend (Rust + Actix-Web)                                     |
+|  - Agent Orchestrator (Manager, Researcher, Analyst, etc.)      |
+|  - Hybrid Search Engine (Vector + BM25)                         |
+|  - Knowledge Graph Manager                                      |
+|  - RBAC + Audit System                                          |
++-----------------------------------------------------------------+
+|  Data Layer                                                     |
+|  - Barq VectorDB (Embeddings & Similarity Search)               |
+|  - Barq GraphDB (Entities & Relationships)                      |
++-----------------------------------------------------------------+
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
@@ -92,7 +98,7 @@ docker-compose up --build -d
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### LLM Provider Options
 
@@ -164,38 +170,38 @@ EMBEDDING_MODEL=voyage-3
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 BrainVault/
-├── backend/                 # Rust API Server
-│   ├── src/
-│   │   ├── api/            # HTTP handlers
-│   │   ├── core/           # Business logic
-│   │   │   ├── agent_orchestrator.rs
-│   │   │   ├── search_engine.rs
-│   │   │   ├── graph_manager.rs
-│   │   │   └── llm/        # LLM clients
-│   │   └── db/             # Database clients
-│   └── Cargo.toml
-├── frontend/               # Next.js 14 App
-│   ├── app/               # App Router pages
-│   │   ├── add/           # File upload
-│   │   ├── agents/        # Agent dashboard
-│   │   ├── chat/          # AI chat interface
-│   │   ├── documents/     # Document browser
-│   │   ├── graph/         # Knowledge graph
-│   │   ├── search/        # Hybrid search
-│   │   ├── security/      # Audit logs
-│   │   └── settings/      # Configuration
-│   └── components/        # Shared UI components
-├── docker-compose.yml
-└── .env.example
+|-- backend/                 # Rust API Server
+|   |-- src/
+|   |   |-- api/            # HTTP handlers
+|   |   |-- core/           # Business logic
+|   |   |   |-- agent_orchestrator.rs
+|   |   |   |-- search_engine.rs
+|   |   |   |-- graph_manager.rs
+|   |   |   +-- llm/        # LLM clients
+|   |   +-- db/             # Database clients
+|   +-- Cargo.toml
+|-- frontend/               # Next.js 14 App
+|   |-- app/               # App Router pages
+|   |   |-- add/           # File upload
+|   |   |-- agents/        # Agent dashboard
+|   |   |-- chat/          # AI chat interface
+|   |   |-- documents/     # Document browser
+|   |   |-- graph/         # Knowledge graph
+|   |   |-- search/        # Hybrid search
+|   |   |-- security/      # Audit logs
+|   |   +-- settings/      # Configuration
+|   +-- components/        # Shared UI components
+|-- docker-compose.yml
++-- .env.example
 ```
 
 ---
 
-## 🔧 API Reference
+## API Reference
 
 ### Knowledge Ingestion
 ```bash
@@ -245,7 +251,7 @@ Content-Type: application/json
 
 ---
 
-## 🐳 Docker Services
+## Docker Services
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -261,7 +267,7 @@ Content-Type: application/json
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Run Backend Locally
 ```bash
@@ -284,7 +290,7 @@ cargo test
 
 ---
 
-## 📊 Roadmap
+## Roadmap
 
 - [x] Phase 1: Core Infrastructure (Vector + Graph DBs)
 - [x] Phase 2: Hybrid Search Engine
@@ -298,18 +304,18 @@ cargo test
 
 ---
 
-## 📄 License
+## License
 
 MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [Rust](https://www.rust-lang.org/), [Actix-Web](https://actix.rs/), [Next.js](https://nextjs.org/)
-- Powered by [Barq](https://github.com/your/barq) Vector & Graph databases
+- Powered by Barq Vector & Graph databases
 - UI components inspired by modern design systems
 
 ---
 
-**Made with 🧠 by the BrainVault Team**
+**Made with care by the BrainVault Team**

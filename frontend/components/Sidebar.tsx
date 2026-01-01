@@ -60,8 +60,25 @@ export function Sidebar() {
     return (
         <div className="w-64 border-r border-border h-screen p-4 flex flex-col bg-card/30 glass-panel backdrop-blur-xl">
             <div className="flex items-center gap-3 px-2 mb-8">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-                    <Cpu className="text-white w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl overflow-hidden">
+                    <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#6366f1" />
+                                <stop offset="100%" stopColor="#22d3ee" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M256 32L456 144V368L256 480L56 368V144L256 32Z" fill="url(#logoGrad)" opacity="0.15" />
+                        <path d="M256 32L456 144V368L256 480L56 368V144L256 32Z" stroke="url(#logoGrad)" strokeWidth="16" fill="none" />
+                        <circle cx="256" cy="200" r="40" fill="url(#logoGrad)" />
+                        <circle cx="180" cy="280" r="28" fill="url(#logoGrad)" />
+                        <circle cx="332" cy="280" r="28" fill="url(#logoGrad)" />
+                        <circle cx="256" cy="320" r="20" fill="url(#logoGrad)" />
+                        <line x1="256" y1="240" x2="180" y2="252" stroke="url(#logoGrad)" strokeWidth="6" />
+                        <line x1="256" y1="240" x2="332" y2="252" stroke="url(#logoGrad)" strokeWidth="6" />
+                        <line x1="180" y1="308" x2="256" y2="300" stroke="url(#logoGrad)" strokeWidth="4" />
+                        <line x1="332" y1="308" x2="256" y2="300" stroke="url(#logoGrad)" strokeWidth="4" />
+                    </svg>
                 </div>
                 <span className="font-bold text-xl gradient-text">BrainVault</span>
             </div>

@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "BrainVault | Enterprise AI Intelligence",
   description: "Advanced Agentic Knowledge Core",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
