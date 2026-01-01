@@ -19,6 +19,7 @@ const fetcher = (url: string) => api.get<TaskResponse[]>(url).then((res) => res.
 
 export default function AgentsPage() {
     const [description, setDescription] = useState("");
+    const [agentType, setAgentType] = useState("Researcher");
     const [submitting, setSubmitting] = useState(false);
 
     // Real-time task list
@@ -35,6 +36,7 @@ export default function AgentsPage() {
         try {
             await api.post<{ task_id: string, status: string }>("/agents/task", {
                 description: description,
+                task_type: agentType
             });
             // Force refresh
             mutate();
@@ -81,6 +83,21 @@ export default function AgentsPage() {
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-muted-foreground mb-2">
+                                    Agent Type
+                                </label>
+                                <select
+                                    className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                                    value={agentType}
+                                    onChange={(e) => setAgentType(e.target.value)}
+                                    id="agent_type"
+                                >
+                                    <option value="Researcher">Researcher</option>
+                                    <option value="Analyst">Analyst</option>
+                                    <option value="Coder">Coder (General)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-muted-foreground mb-2">
                                     Task Description
                                 </label>
                                 <textarea
@@ -103,7 +120,7 @@ export default function AgentsPage() {
                                 {submitting ? "Assigning..." : "Assign Task"}
                             </button>
                             <p className="text-xs text-muted-foreground text-center">
-                                Task will be processed by Cohere LLM Agents.
+                                Task will be processed by BrainVault Agents.
                             </p>
                         </form>
                     </div>

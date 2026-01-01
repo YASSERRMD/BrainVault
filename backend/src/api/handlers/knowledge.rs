@@ -86,9 +86,12 @@ pub async fn chat_with_knowledge(
     engine: web::Data<HybridSearchEngine>,
 ) -> impl Responder {
     // 1. Search for context
-    let search_results = engine.search(&req.query, 5).await.unwrap_or_default();
+    let search_results = match engine.search(&req.query, 5).await {
+        Ok(res) => res,
+        Err(_) => return HttpResponse::InternalServerError().body("Search failed"),
+    };
     
-    if search_results.is_empty() {
+    if search_results.hits.is_empty() {
         return HttpResponse::Ok().json(ChatResponse {
             answer: "I couldn't find any relevant documents in the knowledge base to answer your question.".to_string(),
             sources: vec![],
@@ -96,7 +99,7 @@ pub async fn chat_with_knowledge(
     }
 
     // 2. Prepare context
-    let context_text = search_results.iter()
+    let context_text = search_results.hits.iter()
         .map(|hit| format!("[{}] {}", hit.doc_id, hit.content.as_deref().unwrap_or("")))
         .collect::<Vec<String>>()
         .join("\n\n");
@@ -105,7 +108,7 @@ pub async fn chat_with_knowledge(
     let answer = call_llm_rag(&context_text, &req.query).await;
 
     // 4. Return
-    let sources = search_results.iter().map(|h| h.doc_id.clone()).collect();
+    let sources = search_results.hits.iter().map(|h| h.doc_id.clone()).collect();
     
     HttpResponse::Ok().json(ChatResponse {
         answer,

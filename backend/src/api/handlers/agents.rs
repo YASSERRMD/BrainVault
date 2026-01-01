@@ -1,10 +1,11 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
-use crate::core::agent_orchestrator::{AgentOrchestrator, AgentProfile};
+use crate::core::agent_orchestrator::{AgentOrchestrator, AgentProfile, AgentType};
 
 #[derive(Deserialize)]
 pub struct TaskRequest {
     pub description: String,
+    pub task_type: Option<AgentType>,
 }
 
 #[derive(Serialize)]
@@ -20,7 +21,8 @@ pub async fn submit_task(
     req: web::Json<TaskRequest>,
     orchestrator: web::Data<AgentOrchestrator>,
 ) -> impl Responder {
-    let task_id = orchestrator.submit_task(req.description.clone()).await;
+    let type_enum = req.task_type.clone().unwrap_or(AgentType::Researcher); // Default to Researcher
+    let task_id = orchestrator.submit_task(req.description.clone(), type_enum).await;
     
     // Auto-assign for now (Phase 2 requirement says "trigger tasks", not necessarily manual assign)
     // In a real flow, this might happen asynchronously.

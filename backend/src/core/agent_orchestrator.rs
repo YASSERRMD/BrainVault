@@ -210,79 +210,74 @@ impl AgentOrchestrator {
     
     async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str) -> String {
         use crate::core::llm::azure_openai::AzureOpenAIClient;
-        use crate::core::llm::cohere::CohereClient;
         
-        // Helper to call LLM with fallback: Azure OpenAI -> Cohere -> None
+        // Helper to call LLM
         async fn call_llm(prompt: &str) -> Result<String, String> {
-            // Try Azure OpenAI first
             if let Some(client) = AzureOpenAIClient::new() {
-                match client.generate(prompt).await {
+                 match client.generate(prompt).await {
                     Ok(res) => return Ok(res),
-                    Err(e) => {
-                        println!("WARN: Azure OpenAI failed: {}. Trying Cohere...", e);
-                    }
-                }
+                     Err(e) => println!("WARN: Azure OpenAI failed: {}", e),
+                 }
             }
-            
-            // Fallback to Cohere
-            if let Some(client) = CohereClient::new() {
-                return client.generate(prompt).await;
-            }
-            
-            Err("No LLM provider configured".to_string())
+            Err("No LLM provider available".to_string())
         }
         
         match profile.agent_type {
             AgentType::Researcher => {
-                let mut search_context = "No results found.".to_string();
-                if let Some(ref engine) = self.search_engine {
-                    let query = description.replace("Find ", "").replace("Search for ", "");
-                    if let Ok(results) = engine.search(&query, 5).await {
-                         let docs: Vec<String> = results.hits.iter().map(|h| h.content.clone().unwrap_or_default().chars().take(200).collect()).collect();
-                         search_context = docs.join("\n---\n");
-                    }
-                }
-                
-                let prompt = format!(
-                    "You are a researcher. Based on the following documents, answer the query: '{}'\n\nDocuments:\n{}", 
-                    description, search_context
+                // deep_research_workflow
+                let plan_prompt = format!(
+                    "You are a Lead Researcher. Break down this research topic into 3 specific search queries to gather comprehensive information.\nTopic: '{}'\nOutput Format: just the 3 queries, one per line.", 
+                    description
                 );
                 
-                match call_llm(&prompt).await {
-                    Ok(res) => format!("Research Findings:\n{}", res),
-                    Err(e) => {
-                        if e.contains("Rate Limit") || e.contains("No LLM") {
-                            format!("[Fallback Mode]\nQuery: {}\n\nRelevant Context Found:\n{}", description, search_context)
-                        } else {
-                            format!("Found docs, but generation failed: {}. Context: {}", e, search_context)
+                let queries = match call_llm(&plan_prompt).await {
+                    Ok(res) => res.lines().map(|s| s.trim().replace("- ", "").to_string()).collect::<Vec<String>>(),
+                    Err(_) => vec![description.to_string()]
+                };
+                
+                let mut accumulated_context = String::new();
+                
+                if let Some(ref engine) = self.search_engine {
+                    for query in queries {
+                        if let Ok(results) = engine.search(&query, 3).await {
+                            for hit in results.hits {
+                                accumulated_context.push_str(&format!("\nSource [{}]: {}\n", hit.doc_id, hit.content.unwrap_or_default()));
+                            }
                         }
                     }
                 }
+                
+                if accumulated_context.is_empty() {
+                    accumulated_context = "No internal documents found.".to_string();
+                }
+                
+                let report_prompt = format!(
+                    "You are a Research Agent. Write a comprehensive research report on: '{}'.\n\nBase your report strictly on the following gathered context:\n{}\n\nStructure the report with Introduction, Key Findings, and Conclusion.", 
+                    description, accumulated_context
+                );
+                
+                call_llm(&report_prompt).await.unwrap_or_else(|e| format!("Research failed: {}", e))
             },
             AgentType::Analyst => {
-                let prompt = format!("You are an expert analyst. Analyze the following request: '{}'", description);
-                match call_llm(&prompt).await {
-                    Ok(res) => format!("Analysis:\n{}", res),
-                    Err(e) => {
-                        if e.contains("Rate Limit") || e.contains("No LLM") {
-                            format!("[Fallback Mode]\nAnalysis Request: {}\n\nPlease configure an LLM provider.", description)
-                        } else {
-                            format!("Analysis failed: {}", e)
-                        }
-                    }
+                // Analysis logic
+                let mut context = String::new();
+                if let Some(ref engine) = self.search_engine {
+                     if let Ok(results) = engine.search(description, 5).await {
+                         for hit in results.hits {
+                             context.push_str(&format!("\n[{}]: {}\n", hit.doc_id, hit.content.unwrap_or_default()));
+                         }
+                     }
                 }
+                
+                let analysis_prompt = format!(
+                    "You are a Senior Data Analyst. specific task: '{}'.\n\nAnalyze the following data points for patterns, anomalies, or contradictions:\n{}\n\nProvide a detailed analysis.", 
+                    description, context
+                );
+                
+                call_llm(&analysis_prompt).await.unwrap_or_else(|e| format!("Analysis failed: {}", e))
             },
             _ => {
-                match call_llm(&description).await {
-                    Ok(res) => res,
-                    Err(e) => {
-                        if e.contains("Rate Limit") || e.contains("No LLM") {
-                            format!("[Fallback Mode]\nTask received: {}\n\nNo LLM provider available.", description)
-                        } else {
-                            format!("Processing failed: {}", e)
-                        }
-                    }
-                }
+                call_llm(description).await.unwrap_or_else(|e| format!("Task failed: {}", e))
             }
         }
     }
