@@ -8,14 +8,18 @@ import {
     Database,
     Settings,
     ShieldCheck,
-    Cpu
+    Cpu,
+    MessageSquare,
+    FilePlus
 } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Chat", href: "/chat", icon: MessageSquare },
     { name: "Search", href: "/search", icon: Search },
     { name: "Knowledge Graph", href: "/graph", icon: Database },
+    { name: "Add Knowledge", href: "/add", icon: FilePlus },
     { name: "Agents", href: "/agents", icon: Cpu },
     { name: "Security", href: "/security", icon: ShieldCheck },
     { name: "Settings", href: "/settings", icon: Settings },

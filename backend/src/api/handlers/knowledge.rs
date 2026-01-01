@@ -20,6 +20,99 @@ pub struct SearchQuery {
     pub top_k: usize,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ChatRequest {
+    pub query: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ChatResponse {
+    pub answer: String,
+    pub sources: Vec<String>,
+}
+
+// Simple LLM Helper for RAG
+async fn call_llm_rag(context: &str, query: &str) -> String {
+    let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap_or_default();
+    let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_default();
+    let deployment = std::env::var("AZURE_OPENAI_DEPLOYMENT_NAME").unwrap_or_else(|_| "gpt-4o".to_string());
+    
+    if api_key.is_empty() || endpoint.is_empty() {
+        return "Azure OpenAI not configured. Please check your settings.".to_string();
+    }
+
+    let url = format!("{}/openai/deployments/{}/chat/completions?api-version=2024-02-15-preview", endpoint, deployment);
+    
+    let client = reqwest::Client::new();
+    let prompt = format!(
+        "You are BrainVault, an intelligent knowledge assistant. \
+        Answer the user's question based strictly on the context provided below. \
+        If the answer is not in the context, say 'I don't have enough information in my knowledge base.'\
+        \n\nContext:\n{}\n\nQuestion: {}", 
+        context, query
+    );
+
+    let body = serde_json::json!({
+        "messages": [
+            {"role": "system", "content": "You are a helpful AI assistant for a knowledge management system."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 500
+    });
+
+    match client.post(&url)
+        .header("neurelo-key", &api_key) // Correction: Usually 'api-key' for Azure, strictly.
+        .header("api-key", &api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await 
+    {
+        Ok(res) => {
+            if let Ok(json) = res.json::<serde_json::Value>().await {
+                json["choices"][0]["message"]["content"].as_str().unwrap_or("Failed to generate response").to_string()
+            } else {
+                "Failed to parse LLM response".to_string()
+            }
+        },
+        Err(e) => format!("LLM Error: {}", e)
+    }
+}
+
+#[post("/api/chat")]
+pub async fn chat_with_knowledge(
+    req: web::Json<ChatRequest>,
+    engine: web::Data<HybridSearchEngine>,
+) -> impl Responder {
+    // 1. Search for context
+    let search_results = engine.search(&req.query, 5).await.unwrap_or_default();
+    
+    if search_results.is_empty() {
+        return HttpResponse::Ok().json(ChatResponse {
+            answer: "I couldn't find any relevant documents in the knowledge base to answer your question.".to_string(),
+            sources: vec![],
+        });
+    }
+
+    // 2. Prepare context
+    let context_text = search_results.iter()
+        .map(|hit| format!("[{}] {}", hit.doc_id, hit.content.as_deref().unwrap_or("")))
+        .collect::<Vec<String>>()
+        .join("\n\n");
+
+    // 3. Generate Answer
+    let answer = call_llm_rag(&context_text, &req.query).await;
+
+    // 4. Return
+    let sources = search_results.iter().map(|h| h.doc_id.clone()).collect();
+    
+    HttpResponse::Ok().json(ChatResponse {
+        answer,
+        sources
+    })
+}
+
 #[get("/api/health")]
 pub async fn health_check(
     engine: web::Data<HybridSearchEngine>,
@@ -104,6 +197,32 @@ pub async fn seed_test_data(
         let _ = graph.add_entity(entity).await;
     }
 
+    // Add graph relationships
+    let relationships = vec![
+        Relationship { 
+            from_id: "quantum-comp".to_string(), 
+            to_id: "cybersecurity".to_string(), 
+            rel_type: "IMPACTS".to_string(),
+            properties: std::collections::HashMap::new() 
+        },
+        Relationship { 
+            from_id: "machine-learning".to_string(), 
+            to_id: "cybersecurity".to_string(), 
+            rel_type: "ENHANCES".to_string(),
+            properties: std::collections::HashMap::new() 
+        },
+        Relationship { 
+            from_id: "machine-learning".to_string(), 
+            to_id: "quantum-comp".to_string(), 
+            rel_type: "RELATED_TO".to_string(),
+            properties: std::collections::HashMap::new() 
+        },
+    ];
+
+    for rel in relationships {
+        let _ = graph.add_relationship(rel).await;
+    }
+
     HttpResponse::Ok().json(serde_json::json!({
         "status": "seeded",
         "documents_ingested": ingested,
@@ -154,7 +273,6 @@ pub async fn list_all_documents(
     HttpResponse::Ok().json(serde_json::json!({
         "documents": documents,
         "count": documents.len()
-    }))
     }))
 }
 
