@@ -2,17 +2,17 @@
 
 ## Phase 2: Advanced Autonomous Agents
 **Objective:** Enable agents to perform complex, multi-step cognitive tasks rather than just simple generation.
-- [ ] **Agent Workflow Engine**: Create a structure to define multi-step agent behaviors.
-- [ ] **Research Agent**:
+- [x] **Agent Workflow Engine**: Create a structure to define multi-step agent behaviors.
+- [x] **Research Agent**:
     - Capacity to decompose a query into sub-questions.
     - specialized tools for "Deep Reading" of internal documents.
     - Output: Comprehensive Research Report with citations.
-- [ ] **Analyst Agent**:
+- [x] **Analyst Agent**:
     - specialized in detecting patterns, contradictions, and data correlation across documents.
 
 ## Phase 3: Intelligent Ingestion (Graph Extraction)
 **Objective:** Automate the Knowledge Graph population to make it a true "Second Brain".
-- [ ] **Entity Extraction Pipeline**:
+- [x] **Entity Extraction Pipeline**:
     - Triggered automatically upon document ingestion.
     - Uses LLM to extract Entities (Nodes) and Relationships (Edges).
 - [ ] **Graph-Augmented Retrieval (GraphRAG)**:

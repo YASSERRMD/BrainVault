@@ -115,34 +115,64 @@ async fn extract_graph_data(content: &str) -> (Vec<Entity>, Vec<Relationship>) {
 pub async fn chat_with_knowledge(
     req: web::Json<ChatRequest>,
     engine: web::Data<HybridSearchEngine>,
+    graph: web::Data<KnowledgeGraphManager>,
 ) -> impl Responder {
-    // 1. Search for context
+    // 1. Search for document context (Vector Search)
     let search_results = match engine.search(&req.query, 5).await {
         Ok(res) => res,
         Err(_) => return HttpResponse::InternalServerError().body("Search failed"),
     };
     
-    if search_results.hits.is_empty() {
+    // 2. Search for Graph Context (GraphRAG)
+    let mut graph_context_str = String::new();
+    let all_entities = graph.get_graph_data().await.entities;
+    let query_lower = req.query.to_lowercase();
+    
+    // Find entities mentioned in the query
+    let matched_entities: Vec<&Entity> = all_entities.iter()
+        .filter(|e| {
+            let name = e.properties.get("name").unwrap_or(&e.id).to_lowercase();
+            query_lower.contains(&name) || query_lower.contains(&e.id.to_lowercase())
+        })
+        .collect();
+
+    if !matched_entities.is_empty() {
+        graph_context_str.push_str("\n\n[Knowledge Graph Relationships]:\n");
+        for entity in matched_entities {
+            if let Ok(context) = graph.find_related_context(&entity.id, 1).await {
+                for rel in context.relationships {
+                    graph_context_str.push_str(&format!(
+                        " - {} {} {} (Prop: {:?})\n", 
+                        rel.from_id, rel.rel_type, rel.to_id, rel.properties
+                    ));
+                }
+            }
+        }
+    }
+    
+    if search_results.hits.is_empty() && graph_context_str.is_empty() {
         return HttpResponse::Ok().json(ChatResponse {
-            answer: "I couldn't find any relevant documents.".to_string(),
+            answer: "I couldn't find any relevant documents or graph connections.".to_string(),
             sources: vec![],
         });
     }
 
-    // 2. Prepare context
-    let context_text = search_results.hits.iter()
+    // 3. Prepare combined context
+    let doc_context = search_results.hits.iter()
         .map(|hit| format!("[{}] {}", hit.doc_id, hit.content.as_deref().unwrap_or("")))
         .collect::<Vec<String>>()
         .join("\n\n");
+        
+    let full_context = format!("{}\n{}", doc_context, graph_context_str);
 
-    // 3. Generate Answer
+    // 4. Generate Answer
     let prompt = format!(
         "Answer based on context:\n{}\n\nQuestion: {}", 
-        context_text, req.query
+        full_context, req.query
     );
     let answer = call_llm(&prompt).await;
 
-    // 4. Return
+    // 5. Return
     let sources = search_results.hits.iter().map(|h| h.doc_id.clone()).collect();
     
     HttpResponse::Ok().json(ChatResponse {

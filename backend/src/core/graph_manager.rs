@@ -127,4 +127,18 @@ impl KnowledgeGraphManager {
             relationships: relationships.clone(),
         }
     }
+
+    pub async fn find_nodes_by_text(&self, query: &str) -> Vec<Entity> {
+        let query = query.to_lowercase();
+        let entities = self.entities.read().await;
+        
+        entities.values()
+            .filter(|e| {
+                e.id.to_lowercase().contains(&query) || 
+                e.label.to_lowercase().contains(&query) ||
+                e.properties.get("name").map(|n| n.to_lowercase().contains(&query)).unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    }
 }
