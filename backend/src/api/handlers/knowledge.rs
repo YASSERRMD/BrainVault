@@ -4,6 +4,7 @@ use crate::core::search_engine::HybridSearchEngine;
 use crate::core::graph_manager::KnowledgeGraphManager;
 use crate::core::graph_manager::{Entity, Relationship};
 use crate::core::rbac::RBAC;
+use crate::core::audit_manager::AuditManager;
 use crate::db::barq_graph::BarqGraphClient;
 
 #[derive(Serialize, Deserialize)]
@@ -116,7 +117,11 @@ pub async fn chat_with_knowledge(
     req: web::Json<ChatRequest>,
     engine: web::Data<HybridSearchEngine>,
     graph: web::Data<KnowledgeGraphManager>,
+    audit: web::Data<AuditManager>,
 ) -> impl Responder {
+    // Audit Log
+    audit.log_event("Chat Query", "user", "Processing", "Low").await;
+
     // 1. Search for document context (Vector Search)
     let search_results = match engine.search(&req.query, 5).await {
         Ok(res) => res,

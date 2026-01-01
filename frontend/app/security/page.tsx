@@ -2,16 +2,31 @@
 
 import React from "react";
 import { Shield, Lock, Activity, FileText, AlertTriangle, UserCheck } from "lucide-react";
+import { api } from "@/lib/api";
+import useSWR from "swr";
+
+interface SecurityLog {
+    id: string;
+    timestamp: number;
+    event: string;
+    user: string;
+    status: string;
+    risk: string;
+}
+
+const fetcher = (url: string) => api.get<SecurityLog[]>(url).then(res => res.data);
 
 export default function SecurityPage() {
-    // Mock data for Phase 4 demo (replace with API later)
-    const logs = [
-        { id: "evt-001", time: "10:42:15", event: "User Login", user: "admin@brainvault.ai", status: "Success", risk: "Low" },
-        { id: "evt-002", time: "10:45:30", event: "Vector Search", user: "analyst-01", status: "Permitted", risk: "Low" },
-        { id: "evt-003", time: "10:50:12", event: "Graph Access", user: "analyst-01", status: "Permitted", risk: "Low" },
-        { id: "evt-004", time: "11:05:00", event: "Delete Document", user: "guest", status: "Denied", risk: "High" },
-        { id: "evt-005", time: "11:10:22", event: "Agent Task", user: "system", status: "Completed", risk: "Low" },
-    ];
+    const { data: logs, error } = useSWR("/security/logs", fetcher, {
+        refreshInterval: 2000,
+        fallbackData: []
+    });
+
+    const formatTime = (ts: number) => {
+        return new Date(ts * 1000).toLocaleTimeString();
+    };
+
+    const auditedCount = logs ? logs.length : 0;
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
@@ -57,7 +72,7 @@ export default function SecurityPage() {
                         <FileText className="w-24 h-24" />
                     </div>
                     <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">Audited Events</h3>
-                    <div className="text-2xl font-bold mb-1">1,240</div>
+                    <div className="text-2xl font-bold mb-1">{auditedCount}</div>
                     <p className="text-xs text-muted-foreground">Last 24 hours</p>
                 </div>
             </div>
@@ -76,9 +91,9 @@ export default function SecurityPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {logs.map((log) => (
+                            {logs && logs.map((log) => (
                                 <tr key={log.id} className="hover:bg-secondary/30 transition-colors">
-                                    <td className="px-4 py-4 font-mono text-muted-foreground">{log.time}</td>
+                                    <td className="px-4 py-4 font-mono text-muted-foreground">{formatTime(log.timestamp)}</td>
                                     <td className="px-4 py-4 font-medium">{log.event}</td>
                                     <td className="px-4 py-4 text-muted-foreground">{log.user}</td>
                                     <td className="px-4 py-4">
@@ -100,6 +115,13 @@ export default function SecurityPage() {
                                     </td>
                                 </tr>
                             ))}
+                            {(!logs || logs.length === 0) && (
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                                        No recent formatted audit logs found.
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

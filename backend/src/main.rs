@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
-use brainvault_backend::api::handlers::{knowledge, agents};
+use brainvault_backend::api::handlers::{knowledge, agents, security};
+use brainvault_backend::core::audit_manager::AuditManager;
 use brainvault_backend::core::search_engine::{HybridSearchEngine, SearchWeights};
 use brainvault_backend::core::graph_manager::KnowledgeGraphManager;
 use brainvault_backend::core::rbac::{RBAC, Role, Permission};
@@ -74,6 +75,10 @@ async fn main() -> std::io::Result<()> {
     let rbac_data = web::Data::new(rbac);
     let orch_data = web::Data::new(orchestrator);
 
+    // Initialize Audit Manager
+    let audit_manager = AuditManager::new();
+    let audit_data = web::Data::new(audit_manager);
+
     HttpServer::new(move || {
         let cors = actix_cors::Cors::permissive(); // For dev phase only
 
@@ -83,6 +88,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(graph_data.clone())
             .app_data(rbac_data.clone())
             .app_data(orch_data.clone())
+            .app_data(audit_data.clone())
             .service(knowledge::health_check)
             .service(knowledge::ingest_knowledge)
             .service(knowledge::hybrid_search)
@@ -98,6 +104,7 @@ async fn main() -> std::io::Result<()> {
             .service(agents::get_stats)
             .service(agents::get_all_tasks)
             .service(agents::register_agent)
+            .service(security::get_security_logs)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
