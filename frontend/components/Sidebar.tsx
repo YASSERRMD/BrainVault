@@ -98,10 +98,10 @@ export function Sidebar() {
                     <button
                         onClick={toggleTheme}
                         className="flex-1 flex items-center justify-center gap-2 p-2 rounded-lg bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all border border-border"
-                        title="Toggle Theme"
+                        title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
                     >
-                        {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
-                        {theme === "dark" ? "Dark" : "Light"}
+                        {theme === "dark" ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
+                        {theme === "dark" ? "Light" : "Dark"}
                     </button>
                     <button
                         onClick={toggleRole}
