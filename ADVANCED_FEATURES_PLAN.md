@@ -30,10 +30,10 @@
 
 ## Phase 5: Cognitive Mesh (Multi-Agent Swarm)
 **Objective:** Enable high-level "Manager" agents to autonomously coordinate a team of specialized agents.
-- [ ] **Manager Agent Logic**:
+- [x] **Manager Agent Logic**:
     - Ability to break down a high-level goal (e.g., "Build a feature to X") into sub-tasks (Research -> Code -> Review).
     - Recursively submit tasks to the `AgentOrchestrator`.
-- [ ] **Inter-Agent Communication**:
+- [x] **Inter-Agent Communication**:
     - Agents sharing context/results via the Knowledge Graph (`agent-result-*` documents).
 - [ ] **Self-Reflection Loop**:
     - Reviewer Agent critiques output; Manager re-assigns if quality is low.
