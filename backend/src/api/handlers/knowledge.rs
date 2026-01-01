@@ -31,38 +31,29 @@ pub struct ChatResponse {
     pub sources: Vec<String>,
 }
 
-// Simple LLM Helper for RAG
-async fn call_llm_rag(context: &str, query: &str) -> String {
+// Generalized LLM Helper
+async fn call_llm(prompt: &str) -> String {
     let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap_or_default();
     let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_default();
     let deployment = std::env::var("AZURE_OPENAI_DEPLOYMENT_NAME").unwrap_or_else(|_| "gpt-4o".to_string());
     
     if api_key.is_empty() || endpoint.is_empty() {
-        return "Azure OpenAI not configured. Please check your settings.".to_string();
+        return String::from("Azure OpenAI not configured.");
     }
 
     let url = format!("{}/openai/deployments/{}/chat/completions?api-version=2024-02-15-preview", endpoint, deployment);
-    
     let client = reqwest::Client::new();
-    let prompt = format!(
-        "You are BrainVault, an intelligent knowledge assistant. \
-        Answer the user's question based strictly on the context provided below. \
-        If the answer is not in the context, say 'I don't have enough information in my knowledge base.'\
-        \n\nContext:\n{}\n\nQuestion: {}", 
-        context, query
-    );
 
     let body = serde_json::json!({
         "messages": [
-            {"role": "system", "content": "You are a helpful AI assistant for a knowledge management system."},
+            {"role": "system", "content": "You are a Knowledge Graph extraction engine."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.3,
-        "max_tokens": 500
+        "temperature": 0.1,
+        "max_tokens": 1000
     });
 
     match client.post(&url)
-        .header("neurelo-key", &api_key) // Correction: Usually 'api-key' for Azure, strictly.
         .header("api-key", &api_key)
         .header("Content-Type", "application/json")
         .json(&body)
@@ -71,13 +62,53 @@ async fn call_llm_rag(context: &str, query: &str) -> String {
     {
         Ok(res) => {
             if let Ok(json) = res.json::<serde_json::Value>().await {
-                json["choices"][0]["message"]["content"].as_str().unwrap_or("Failed to generate response").to_string()
+                json["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
             } else {
-                "Failed to parse LLM response".to_string()
+                String::new()
             }
         },
-        Err(e) => format!("LLM Error: {}", e)
+        Err(_) => String::new()
     }
+}
+
+async fn extract_graph_data(content: &str) -> (Vec<Entity>, Vec<Relationship>) {
+    let prompt = format!(
+        "Analyze the text and extract entities and relationships. \
+        Return ONLY valid lines in this format:\n\
+        ENTITY|<id_slug>|<Label>|<name_property>\n\
+        REL|<from_id_slug>|<to_id_slug>|<TYPE>\n\
+        \n\
+        Rules:\n\
+        - id_slug must be lowercase-kebab-case (e.g. quantum-computing)\n\
+        - Label like 'Technology', 'Person', 'Company'\n\
+        - Do not add explanations.\n\nText:\n{}", 
+        content.chars().take(2000).collect::<String>() // Limit context
+    );
+
+    let response = call_llm(&prompt).await;
+    let mut entities = Vec::new();
+    let mut relationships = Vec::new();
+
+    for line in response.lines() {
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() >= 4 && parts[0] == "ENTITY" {
+            entities.push(Entity {
+                id: parts[1].trim().to_string(),
+                label: parts[2].trim().to_string(),
+                properties: std::collections::HashMap::from([
+                    ("name".to_string(), parts[3].trim().to_string())
+                ])
+            });
+        } else if parts.len() >= 4 && parts[0] == "REL" {
+            relationships.push(Relationship {
+                from_id: parts[1].trim().to_string(),
+                to_id: parts[2].trim().to_string(),
+                rel_type: parts[3].trim().to_string(),
+                properties: std::collections::HashMap::new()
+            });
+        }
+    }
+    (entities, relationships)
 }
 
 #[post("/api/chat")]
@@ -93,7 +124,7 @@ pub async fn chat_with_knowledge(
     
     if search_results.hits.is_empty() {
         return HttpResponse::Ok().json(ChatResponse {
-            answer: "I couldn't find any relevant documents in the knowledge base to answer your question.".to_string(),
+            answer: "I couldn't find any relevant documents.".to_string(),
             sources: vec![],
         });
     }
@@ -105,7 +136,11 @@ pub async fn chat_with_knowledge(
         .join("\n\n");
 
     // 3. Generate Answer
-    let answer = call_llm_rag(&context_text, &req.query).await;
+    let prompt = format!(
+        "Answer based on context:\n{}\n\nQuestion: {}", 
+        context_text, req.query
+    );
+    let answer = call_llm(&prompt).await;
 
     // 4. Return
     let sources = search_results.hits.iter().map(|h| h.doc_id.clone()).collect();
@@ -121,7 +156,7 @@ pub async fn health_check(
     engine: web::Data<HybridSearchEngine>,
 ) -> impl Responder {
     // Check vector DB
-    let vector_status = engine.vector_db.get_document_count().await > 0 || true; // Local always works
+    let vector_status = engine.vector_db.get_document_count().await > 0 || true; 
     
     // Check graph DB
     let graph_client = BarqGraphClient::new();
@@ -148,18 +183,26 @@ pub async fn ingest_knowledge(
         return HttpResponse::InternalServerError().body(format!("Vector ingestion failed: {}", e));
     }
     
-    // 2. Create entity nodes in graph
-    for entity in &req.entities {
-         if let Err(e) = graph.add_entity(entity.clone()).await {
-             return HttpResponse::InternalServerError().body(format!("Graph entity creation failed: {}", e));
-         }
+    let mut entities = req.entities.clone();
+    let mut relationships = req.relationships.clone();
+
+    // 2. Auto-Extract if empty
+    if entities.is_empty() {
+        println!("INFO: Auto-extracting entities for doc {}", req.doc_id);
+        let (extracted_ents, extracted_rels) = extract_graph_data(&req.content).await;
+        entities = extracted_ents;
+        relationships = extracted_rels;
+        println!("INFO: Extracted {} entities, {} rels", entities.len(), relationships.len());
     }
     
-    // 3. Create relationships in graph
-    for rel in &req.relationships {
-         if let Err(e) = graph.add_relationship(rel.clone()).await {
-             return HttpResponse::InternalServerError().body(format!("Graph relationship creation failed: {}", e));
-         }
+    // 3. Create entity nodes in graph
+    for entity in entities {
+         let _ = graph.add_entity(entity).await;
+    }
+    
+    // 4. Create relationships in graph
+    for rel in relationships {
+         let _ = graph.add_relationship(rel).await;
     }
     
     HttpResponse::Ok().json(serde_json::json!({"status": "ingested", "doc_id": req.doc_id}))
