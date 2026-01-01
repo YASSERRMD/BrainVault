@@ -1,12 +1,12 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="BrainVault Logo" width="180" height="180">
+</p>
+
 # BrainVault
 
 **An Agentic Knowledge Management System with Neural Graph Intelligence**
 
 BrainVault is a next-generation knowledge base that combines **vector search**, **knowledge graphs**, and **autonomous AI agents** to transform raw documents into interconnected, queryable intelligence.
-
-<p align="center">
-  <img src="assets/logo.svg" alt="BrainVault Logo" width="200" height="200">
-</p>
 
 ![Architecture](https://img.shields.io/badge/Architecture-Rust%20%2B%20Next.js-blue)
 ![Docker](https://img.shields.io/badge/Docker-Ready-green)
