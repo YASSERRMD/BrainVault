@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()> {
     rbac.add_permission(Permission {
         user_id: "viewer".to_string(),
         role: Role::Viewer,
-        accessible_entities: vec![], // Will need to be populated to see anything
+        accessible_entities: vec!["doc-001".to_string(), "quantum-comp".to_string()], 
         accessible_collections: vec![],
     });
 

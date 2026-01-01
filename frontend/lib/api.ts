@@ -1,14 +1,22 @@
 import axios from "axios";
 
 // Default admin user ID for phase 1-2
-const DEFAULT_USER_ID = "admin";
+// Default admin user ID for phase 1-2
+export const DEFAULT_USER_ID = "admin";
 
 export const api = axios.create({
     baseURL: "http://localhost:8080/api",
     headers: {
         "Content-Type": "application/json",
-        "X-User-ID": DEFAULT_USER_ID,
     },
+});
+
+api.interceptors.request.use((config) => {
+    if (typeof window !== "undefined") {
+        const userId = localStorage.getItem("current_user") || DEFAULT_USER_ID;
+        config.headers["X-User-ID"] = userId;
+    }
+    return config;
 });
 
 export interface SearchResult {

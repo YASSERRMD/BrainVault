@@ -10,7 +10,11 @@ import {
     ShieldCheck,
     Cpu,
     MessageSquare,
-    FilePlus
+    FilePlus,
+    Sun,
+    Moon,
+    User,
+    Lock
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -27,6 +31,31 @@ const navItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const [theme, setTheme] = React.useState("dark");
+    const [role, setRole] = React.useState("admin");
+
+    React.useEffect(() => {
+        const savedTheme = localStorage.getItem("theme") || "dark";
+        setTheme(savedTheme);
+        document.documentElement.setAttribute("data-theme", savedTheme);
+
+        const savedRole = localStorage.getItem("current_user") || "admin";
+        setRole(savedRole);
+    }, []);
+
+    const toggleTheme = () => {
+        const newTheme = theme === "dark" ? "light" : "dark";
+        setTheme(newTheme);
+        localStorage.setItem("theme", newTheme);
+        document.documentElement.setAttribute("data-theme", newTheme);
+    };
+
+    const toggleRole = () => {
+        const newRole = role === "admin" ? "viewer" : "admin";
+        setRole(newRole);
+        localStorage.setItem("current_user", newRole);
+        window.location.reload();
+    };
 
     return (
         <div className="w-64 border-r border-border h-screen p-4 flex flex-col bg-card/50 glass-panel">
@@ -63,12 +92,35 @@ export function Sidebar() {
                 })}
             </nav>
 
-            <div className="mt-auto px-2">
+            <div className="mt-auto px-2 space-y-3">
+                {/* Toggles */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={toggleTheme}
+                        className="flex-1 flex items-center justify-center gap-2 p-2 rounded-lg bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all border border-border"
+                        title="Toggle Theme"
+                    >
+                        {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                        {theme === "dark" ? "Dark" : "Light"}
+                    </button>
+                    <button
+                        onClick={toggleRole}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium transition-all border border-border",
+                            role === "admin" ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-secondary text-muted-foreground"
+                        )}
+                        title="Toggle Role"
+                    >
+                        {role === "admin" ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                        {role === "admin" ? "Admin" : "Viewer"}
+                    </button>
+                </div>
+
                 <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700">
                     <p className="text-xs text-muted-foreground mb-2">System Status</p>
                     <div className="flex items-center gap-2 mb-1">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-sm font-semibold">Online</span>
+                        <span className="text-sm font-semibold text-white">Online</span>
                     </div>
                     <p className="text-[10px] text-slate-500">v1.2.0 • NAFS-4 Active</p>
                 </div>
