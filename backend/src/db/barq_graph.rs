@@ -66,7 +66,7 @@ pub struct BarqGraphClient {
 
 impl BarqGraphClient {
     pub fn new() -> Self {
-        let base_url = env::var("GRAPH_DB_URL").unwrap_or_else(|_| "http://barq-graph:7687".to_string());
+        let base_url = env::var("GRAPH_DB_URL").unwrap_or_else(|_| "http://barq-graph:8080".to_string());
         Self {
             base_url,
             client: Client::new(),

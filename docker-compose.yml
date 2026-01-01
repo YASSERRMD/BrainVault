@@ -10,7 +10,8 @@ services:
   barq-graph:
     image: barq-graphdb:latest
     ports:
-      - "7687:3000" # Graph REST API
+      - "7687:8080" # Graph REST API (container runs on 8080)
+      - "7688:50051" # Graph gRPC
     environment:
       - GRAPH_DB_MEMORY_MB=512
 
@@ -26,7 +27,7 @@ services:
     environment:
       - VECTOR_DB_URL=http://barq-vector:8080
       - VECTOR_DB_GRPC_URL=http://barq-vector:50051
-      - GRAPH_DB_URL=http://barq-graph:3000
+      - GRAPH_DB_URL=http://barq-graph:8080
 
   brainvault-frontend:
     build: ./frontend
