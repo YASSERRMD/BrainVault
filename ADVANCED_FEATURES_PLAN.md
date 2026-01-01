@@ -21,7 +21,7 @@
 
 ## Phase 4: Enterprise Security & Observability
 **Objective:** Make the system enterprise-ready with strict access controls and audit trails.
-- [ ] **RBAC Enforcement**:
+- [x] **RBAC Enforcement**:
     - Metadata-based filtering in Vector Search (only return docs matching user role).
     - Hard filtering in Graph traversal.
 - [x] **Audit Dashboard**:
