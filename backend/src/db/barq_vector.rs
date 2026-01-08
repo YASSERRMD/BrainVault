@@ -252,6 +252,16 @@ impl BarqVectorClient {
             content: Some(content.clone()),
         }).collect()
     }
+    
+    pub async fn get_all_documents(&self) -> Vec<serde_json::Value> {
+        let cache = self.content_cache.read().await;
+        cache.iter().map(|(id, content)| {
+            serde_json::json!({
+                "doc_id": id,
+                "content": if content.len() > 200 { format!("{}...", &content[..200]) } else { content.clone() }
+            })
+        }).collect()
+    }
 
     // Backward compatibility
     pub async fn index_vector(&self, doc_id: &str, content: &str) -> Result<(), reqwest::Error> {

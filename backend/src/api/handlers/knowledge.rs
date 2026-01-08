@@ -310,6 +310,16 @@ pub async fn get_knowledge_stats(
     }))
 }
 
+#[get("/api/knowledge/documents")]
+pub async fn list_documents(
+    engine: web::Data<HybridSearchEngine>,
+) -> impl Responder {
+    let documents = engine.get_all_documents().await;
+    HttpResponse::Ok().json(serde_json::json!({
+        "documents": documents
+    }))
+}
+
 #[get("/api/documents/{doc_id}")]
 pub async fn get_document(
     path: web::Path<String>,

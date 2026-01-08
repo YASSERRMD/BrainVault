@@ -90,5 +90,9 @@ impl HybridSearchEngine {
     pub async fn get_document_count(&self) -> usize {
         self.vector_db.get_document_count().await
     }
+    
+    pub async fn get_all_documents(&self) -> Vec<serde_json::Value> {
+        self.vector_db.get_all_documents().await
+    }
 }
 

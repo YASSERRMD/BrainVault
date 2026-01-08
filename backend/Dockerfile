@@ -1,6 +1,9 @@
 # Build Stage
 FROM rust:latest as builder
 
+# Install protobuf compiler for nafs-memory gRPC protos
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /usr/src/app
 COPY . .
 
