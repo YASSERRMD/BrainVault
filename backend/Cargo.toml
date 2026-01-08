@@ -11,7 +11,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.11", features = ["json"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
-# barq_sdk_rust = { git = "https://github.com/YASSERRMD/Barq.git", package = "barq-sdk-rust" }
+async-trait = "0.1"
+tracing = "0.1"
+
+# NAFS-4 dependencies
+nafs-core = { git = "https://github.com/YASSERRMD/nafs-4.git" }
+nafs-llm = { git = "https://github.com/YASSERRMD/nafs-4.git" }
+nafs-orchestrator = { git = "https://github.com/YASSERRMD/nafs-4.git" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

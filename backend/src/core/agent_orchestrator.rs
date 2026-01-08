@@ -226,14 +226,14 @@ impl AgentOrchestrator {
     }
     
     async fn execute_agent_logic(&self, profile: &AgentProfile, description: &str, _current_task_id: &str) -> String {
-        use crate::core::llm::azure_openai::AzureOpenAIClient;
+        use crate::core::llm::nafs_provider::NafsLLMClient;
         
-        // Helper to call LLM
+        // Helper to call LLM using NAFS-4 multi-provider
         async fn call_llm(prompt: &str) -> Result<String, String> {
-            if let Some(client) = AzureOpenAIClient::new() {
+            if let Some(client) = NafsLLMClient::new() {
                  match client.generate(prompt).await {
                     Ok(res) => return Ok(res),
-                     Err(e) => println!("WARN: Azure OpenAI failed: {}", e),
+                     Err(e) => println!("WARN: LLM ({}) failed: {}", client.provider_name(), e),
                  }
             }
             // Fallback for demo if no LLM key
